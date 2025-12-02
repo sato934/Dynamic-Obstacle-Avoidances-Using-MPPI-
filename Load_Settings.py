@@ -60,7 +60,7 @@ def Load_Settings(i):
     
     # マハラノビス距離による衝突判定
     P['agent_area'] = np.pi * P['agent_radius']**2  # 機体の面積 A_r [m^2]
-    P['collision_risk'] = 0.01  # 許容リスク δ (3%)
+    P['collision_risk'] = 0.03  # 許容リスク δ (3%)
     P['position_covariance'] = np.eye(2) * 0.1**2  # 位置の共分散行列 Σ_k^c (0.1mの標準偏差)
 
     P['var'] = np.array([vF, vav, vav, vav])
