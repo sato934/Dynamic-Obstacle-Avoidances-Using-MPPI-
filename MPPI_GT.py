@@ -112,11 +112,6 @@ def MPPI_GT(P, agbp, bpc, parameter):
                     print('ロック発生')
                     banned_point[:, ban_count - 1] = trial_state[0:3, i]
                     bpc += 1
-                    #if agbp is None:
-                    #   agbp = np.full((3, max(1, bpc)), np.nan)
-                    #if bpc > agbp.shape[1]:
-                    #    extra = bpc - agbp.shape[1]
-                    #    agbp = np.hstack([agbp, np.full((3, extra), np.nan)])
                     agbp[:, bpc - 1] = trial_state[0:3, i]
                     bpc_interval = int(P['check'] / P['dt'])
 
