@@ -49,7 +49,7 @@ from datetime import datetime
 # --- 初期化 ---
 print(datetime.now())
 
-P = Load_Settings(8)  # パラメータ設定の読み込み 【ここの引数を変えることで障害物の形状を変更可能】
+P = Load_Settings(7)  # パラメータ設定の読み込み 【ここの引数を変えることで障害物の形状を変更可能】
 np.random.seed(P['seed'])
 
 # データ格納用

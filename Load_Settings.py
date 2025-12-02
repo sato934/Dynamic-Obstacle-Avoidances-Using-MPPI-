@@ -13,7 +13,7 @@ def Load_Settings(i):
     
     P['dt'] = 0.2 #制御周期[s]
     P['Trial_time'] = 20 #反復1回当たりの時間
-    P['Trial_num'] = 10 #反復回数
+    P['Trial_num'] = 3 #反復回数
     P['Horizon'] = 3 #評価区間 6
     P['K'] = 5000 #経路数（サンプル数）　1000→5000
     P['Temp'] = 0.02 #逆温度
@@ -33,7 +33,7 @@ def Load_Settings(i):
     P['vll'] = 1 #下限　可変乱数分散は不要のため固定
     P['vlu'] = 1 #上限  
     P['random_sample_rate'] = 0
-    P['bp_switch'] = 0 #禁止点の切り替え 0:オフ 1:オン
+    P['bp_switch'] = 1 #禁止点の切り替え 0:オフ 1:オン
     P['check'] = 4 #ロック確認秒数．〇秒前までの経路見てロックかどうか判断
     P['initial_controll'] = np.array([[13], [0], [0], [0]])
     
@@ -424,9 +424,102 @@ def Load_Settings(i):
         
         # 開始位置を変更
         P['Init_State'] = np.array([0, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0]).reshape(-1, 1)
-    
-    # デフォルトの開始位置（i == 5, 6, 7, 8 以外）
-    if i not in [5, 6, 7, 8]:
+    elif i == 9:  #　今後障害物追加予定
+        P['Goal_state'] = np.array([0, -5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0]).reshape(-1, 1)
+        P['axis'] = np.array([-8, 8, -6, 6])
+        
+        start_pos = np.array([0, 4])  # 開始位置
+
+        # 静止障害物で囲む  
+        # 上の壁
+        wall_top = np.array([
+            [-5, -5, 5, 5],
+            [6, 7, 7, 6]
+        ])
+        # 下の壁
+        wall_bottom = np.array([
+            [-5, -5, 5, 5],
+            [-8, -7, -7, -8]
+        ])
+        # 左の壁
+        wall_left = np.array([
+            [-6, -6, -5, -5],
+            [-6, 6, 6, -6]
+        ])
+        # 右の壁
+        wall_right = np.array([
+            [5, 5, 6, 6],
+            [-6, 6, 6, -6]
+        ])
+        
+        # 静的障害物を3次元配列に変換
+        P['object'] = np.stack([wall_top, wall_bottom, wall_left, wall_right], axis=2)
+
+        # 複数の動的円形障害物の設定（初期位置をランダムに）
+        g = P['Goal_state'][:2, 0]  # ゴール座標
+        r = 0.25  # 円の半径
+        n_points = 64  # 円周上の点の数
+
+        num_circles = 15  # 円形障害物の数
+
+        circle_list = []
+        waypoints_list = []
+        segment_times_list = []
+        velocities = []
+
+        for idx in range(num_circles):
+            # 各障害物ごとにランダムな切り返し回数を設定
+            n_waypoints = np.random.randint(2, 3)
+            
+            # 初期位置をランダムに設定（開始位置付近は避ける）
+            while True:
+                center = np.array([
+                    np.random.uniform(-4, 4),
+                    np.random.uniform(-5, 5)
+                ])
+                # 開始位置から2m以上離れていることを確認
+                dist_to_start = np.linalg.norm(center - start_pos)
+                if dist_to_start > 2.0:
+                    break
+
+            # 円周上の点を生成（時計回り）
+            theta = np.linspace(0, 2*np.pi, n_points, endpoint=False)
+            x = center[0] + r * np.cos(theta)
+            y = center[1] + r * np.sin(theta)
+            circle_points = np.stack([x, y], axis=0)
+            circle_list.append(circle_points)
+
+            # 指定された範囲内でランダムな中間地点を生成
+            waypoints = []
+            for _ in range(n_waypoints):
+                xw = np.random.uniform(-4, 4)
+                yw = np.random.uniform(-5, 5)
+                waypoints.append(np.array([xw, yw]))
+            waypoints = np.array(waypoints)
+            waypoints_list.append(waypoints)
+
+            # 各ウェイポイントでの所要時間
+            segment_times = np.random.uniform(1.0, 2.0, n_waypoints)  
+            segment_times = segment_times * (P['Trial_time'] / segment_times.sum())
+            segment_times_list.append(segment_times)
+
+            # 初期速度（最初のウェイポイントに向かう）
+            first_vel = (waypoints[0] - center) / segment_times[0]
+            velocities.append(first_vel)
+
+        P['dynamic'] = True
+        # 動的障害物点群を (2, n_points, num_circles) で格納
+        P['dynamic_obj'] = np.stack(circle_list, axis=2)
+        P['dynamic_waypoints'] = waypoints_list
+        P['dynamic_segment_times'] = segment_times_list
+        P['dynamic_start_time'] = 0.0
+        P['dynamic_end_time'] = float(P['Trial_time'])
+        P['dynamic_velocity'] = velocities
+        
+        # 開始位置を変更
+        P['Init_State'] = np.array([0, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0]).reshape(-1, 1)
+    # デフォルトの開始位置（i == 5, 6, 7, 8, 9以外）
+    if i not in [5, 6, 7, 8, 9]:
         P['Init_State'] = np.array([0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0]).reshape(-1, 1)
     P['State_dim'] = P['Init_State'].size
     P['var2'] = np.diag(P['var2'])

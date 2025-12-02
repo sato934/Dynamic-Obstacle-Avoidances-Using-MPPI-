@@ -2,7 +2,6 @@ import numpy as np
 from numba import njit, prange
 from check import check
 
-# === Numbaによる高速計算カーネル ===
 @njit(fastmath=True, parallel=True)
 def compute_social_force_numba(
     agent_pos_x, agent_pos_y, agent_vel_x, agent_vel_y,  # (K,)
@@ -45,8 +44,10 @@ def compute_social_force_numba(
 
             # --- 2. 静的な距離コスト (最短距離ベース) ---
             # ここでは障害物を点(中心)として簡易計算する場合
-            # ※元のコードの「点群との最短距離」を厳密にやるなら点群データが必要ですが、
-            #   Social Force計算用としては中心距離を使うのが一般的です。
+            # ※元のコードは「点群との最短距離」を厳密にやるなら点群データが必要
+            #   元コードでは障害物表面までの距離を計算しているが、ここでは中心距離を使用
+            #   計算量が増加するが，障害物の形状を正確に反映
+            #   どうするかは保留
             dist_sq = dx*dx + dy*dy
             dist_center = np.sqrt(dist_sq)
             
