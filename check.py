@@ -75,6 +75,13 @@ def check(states1, states2, P, t=None): # t: 現在時刻（動的障害物用�
                 
                 # 元の位置から最初のwaypointへ補間
                 next_pos = waypoints[0]
+                # next_posとoriginal_centerの次元を合わせる
+                if len(next_pos) < len(original_center):
+                    # 2D waypoint → 3D centerの場合、z座標を追加
+                    next_pos = np.append(next_pos, original_center[len(next_pos):])
+                elif len(next_pos) > len(original_center):
+                    # 3D waypoint → 2D centerの場合、次元を削減
+                    next_pos = next_pos[:len(original_center)]
                 current_center = original_center * (1-progress) + next_pos * progress
             else:
                 # 補間処理
@@ -89,6 +96,23 @@ def check(states1, states2, P, t=None): # t: 現在時刻（動的障害物用�
                 # 現在と次のウェイポイント
                 current_pos = waypoints[current_segment-1] if current_segment > 0 else waypoints[0]
                 next_pos = waypoints[current_segment] if current_segment < len(waypoints) else waypoints[-1]
+                
+                # 次元を合わせる
+                if dynamic_obj.ndim == 3:
+                    base_circle = dynamic_obj[:, :, obs_idx]
+                else:
+                    base_circle = dynamic_obj
+                ref_center = base_circle.mean(axis=1)
+                
+                if len(current_pos) < len(ref_center):
+                    current_pos = np.append(current_pos, ref_center[len(current_pos):])
+                elif len(current_pos) > len(ref_center):
+                    current_pos = current_pos[:len(ref_center)]
+                    
+                if len(next_pos) < len(ref_center):
+                    next_pos = np.append(next_pos, ref_center[len(next_pos):])
+                elif len(next_pos) > len(ref_center):
+                    next_pos = next_pos[:len(ref_center)]
                 
                 # 現在位置を補間
                 current_center = current_pos * (1-progress) + next_pos * progress

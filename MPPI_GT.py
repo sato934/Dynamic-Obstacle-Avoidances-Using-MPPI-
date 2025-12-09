@@ -66,9 +66,9 @@ def MPPI_GT(P, agbp, bpc, parameter):
                     
         trial_state[:, i + 1] = Sim_Model(trial_state[:, i], seq_ctrl[:, :, i], P).flatten()
         
-        # 目標到達判定
-        distance_to_goal = np.linalg.norm(trial_state[0:3, i+1] - P['Goal_state'][0:3, 0])
-        goal_threshold = P.get('goal_threshold', 0.2)  # 目標到達とみなす距離の閾値[m]
+        # 目標到達判定 (x, yのみ)
+        distance_to_goal = np.linalg.norm(trial_state[0:2, i+1] - P['Goal_state'][0:2, 0])
+        goal_threshold = P.get('goal_threshold', 0.5)  # 目標到達とみなす距離の閾値[m]
         if distance_to_goal <= goal_threshold:
             print('ゴール！！')
             print(f'ゴール到達位置: x={trial_state[0, i+1]:.2f}, y={trial_state[1, i+1]:.2f}, z={trial_state[2, i+1]:.2f}')

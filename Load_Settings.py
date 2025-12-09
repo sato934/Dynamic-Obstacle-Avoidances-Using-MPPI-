@@ -1,4 +1,4 @@
-import numpy as np
+﻿import numpy as np
 import random
 
 def Load_Settings(i):
@@ -21,19 +21,19 @@ def Load_Settings(i):
     P['ls'] = np.logspace(0, 1, P['Trial_num'])
     vF = 0.1 #分散
     vav = 0.1
-    wp = 3 #位置の重み　禁止点の重みとの関係に注意
-    wv = -np.inf #速度の重み
+    wp = 4 #位置の重み　禁止点の重みとの関係に注意
+    wv = 0 #速度の重み -np.inf
     wa = -np.inf #加速度の重み
     wav = -np.inf #角速度の重み
     wcf = -np.inf #衝突の重み
     wcav = -np.inf #動的障害物回避の重み
 
     P['wbp'] = 3 * 10**6 #禁止点の重み
-    P['speed_rate'] = 0
+    P['speed_rate'] = 1 #速度重視度合い 0:速度無視
     P['vll'] = 1 #下限　可変乱数分散は不要のため固定
     P['vlu'] = 1 #上限  
     P['random_sample_rate'] = 0
-    P['bp_switch'] = 1 #禁止点の切り替え 0:オフ 1:オン
+    P['bp_switch'] = 0 #禁止点の切り替え 0:オフ 1:オン
     P['check'] = 4 #ロック確認秒数．〇秒前までの経路見てロックかどうか判断
     P['initial_controll'] = np.array([[13], [0], [0], [0]])
     
@@ -44,23 +44,27 @@ def Load_Settings(i):
     P['agent_radius'] = 0.2  # 機体の半径[m]　0.35
     P['force_sigma_obstacle'] = 0.15  # 障害物力の減衰パラメータ[m] (ギリギリまで小さく) 0.3
     P['force_factor_obstacle'] = 200.0  # 障害物力の係数 (範囲を極小化した分、強度を大幅に上げる) 80
-    P['lambda_importance'] = 0.4  # 位置vs速度の相対的重要度 2.0
+    P['lambda_importance'] = 0.5  # 位置vs速度の相対的重要度 2.0  0.4
     P['gamma'] = 0.4  # 速度相互作用パラメータ
     P['n'] = 2  # 速度相互作用の指数
     P['n_prime'] = 3  # 角度相互作用の指数
     P['force_factor_social'] = 3.0  # 力の係数 (動的障害物への反発を強化) 3.0
     P['neighborhood_range'] = 7.0  # 近傍範囲[m] (狭い環境では短めに) 7.0
     
-    # 障害物同士 のパラメータ
-    P['overlap_distance'] = 0.6  # 重なり距離[m] (機体半径より大きく)
+    # 障害物同士 のパラメータ 意味ない
+    P['overlap_distance'] = 0.5  # 重なり距離[m] (機体半径より大きく)
     P['force_factor_group_repulsion'] = 10.0  # グループ反発力の係数 (近距離での強い反発)
+    
+    # マルチエージェント用パラメータ
+    P['safety_distance'] = 0.45  # エージェント間の最小安全距離[m] (agent_radius * 2 + マージン)
     
     # 目標到達判定
     P['goal_threshold'] = 0.2  # 目標到達とみなす距離の閾値[m]
+    P['near_goal_threshold'] = 1.0  # 目標近傍での速度緩和を開始する距離[m]
     
     # マハラノビス距離による衝突判定
     P['agent_area'] = np.pi * P['agent_radius']**2  # 機体の面積 A_r [m^2]
-    P['collision_risk'] = 0.03  # 許容リスク δ (3%)
+    P['collision_risk'] = 0.01 # 許容リスク δ (1%)
     P['position_covariance'] = np.eye(2) * 0.1**2  # 位置の共分散行列 Σ_k^c (0.1mの標準偏差)
 
     P['var'] = np.array([vF, vav, vav, vav])
@@ -521,6 +525,7 @@ def Load_Settings(i):
     # デフォルトの開始位置（i == 5, 6, 7, 8, 9以外）
     if i not in [5, 6, 7, 8, 9]:
         P['Init_State'] = np.array([0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0]).reshape(-1, 1)
+    
     P['State_dim'] = P['Init_State'].size
     P['var2'] = np.diag(P['var2'])
     P['Q_f'] = np.diag(P['Q_f'])

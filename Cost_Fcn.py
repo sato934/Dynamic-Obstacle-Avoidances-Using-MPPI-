@@ -5,19 +5,19 @@ from check import check
 @njit(fastmath=True, parallel=True)
 def compute_social_force_numba(
     agent_pos_x, agent_pos_y, agent_vel_x, agent_vel_y,  # (K,)
-    obs_center_x, obs_center_y,                          # (M,) 障害物の数
-    cov_inv_00, cov_inv_01, cov_inv_10, cov_inv_11,      # 逆行列の要素
-    kappa_threshold,
-    force_factor, force_sigma,
-    lambda_importance, gamma, n, n_prime, force_factor_social, neighborhood_range,
-    overlap_distance, force_factor_group, agent_radius
+    obs_points_x, obs_points_y,  # (M, N) 各障害物の全点群
+    obs_point_counts,             # (M,) 各障害物の有効点数
+    cov_inv_00, cov_inv_01, cov_inv_10, cov_inv_11,
+    kappa_threshold, force_factor, force_sigma,
+    lambda_importance, gamma, n, n_prime, force_factor_social, 
+    neighborhood_range, overlap_distance, force_factor_group, agent_radius
 ):
     n_samples = agent_pos_x.shape[0]
-    n_obstacles = obs_center_x.shape[0]
+    n_obstacles = obs_points_x.shape[0]
     
     costs = np.zeros(n_samples, dtype=np.float64)
 
-    # 外側ループを並列化（サンプルごとの計算は独立）
+            # --- 1.　動的衝突確率チェックコスト計算 ---
     for k in prange(n_samples):
         c_x = agent_pos_x[k]
         c_y = agent_pos_y[k]
@@ -27,14 +27,20 @@ def compute_social_force_numba(
         cost_k = 0.0
         
         for o in range(n_obstacles):
-            o_x = obs_center_x[o]
-            o_y = obs_center_y[o]
+            n_points = obs_point_counts[o]
             
-            # --- 1. マハラノビス距離チェック ---
-            dx = c_x - o_x
-            dy = c_y - o_y
+            # 障害物の中心を計算
+            o_center_x = 0.0
+            o_center_y = 0.0
+            for p in range(n_points):
+                o_center_x += obs_points_x[o, p]
+                o_center_y += obs_points_y[o, p]
+            o_center_x /= n_points
+            o_center_y /= n_points
             
-            # 行列演算を展開: d.T @ cov_inv @ d
+            # マハラノビス距離は中心との距離で計算
+            dx = c_x - o_center_x
+            dy = c_y - o_center_y
             mahalanobis_sq = (dx * cov_inv_00 + dy * cov_inv_10) * dx + \
                              (dx * cov_inv_01 + dy * cov_inv_11) * dy
             
@@ -42,24 +48,25 @@ def compute_social_force_numba(
                 risk_violation = kappa_threshold - mahalanobis_sq
                 cost_k += force_factor * risk_violation * 1e8
 
-            # --- 2. 静的な距離コスト (最短距離ベース) ---
-            # ここでは障害物を点(中心)として簡易計算する場合
-            # ※元のコードは「点群との最短距離」を厳密にやるなら点群データが必要
-            #   元コードでは障害物表面までの距離を計算しているが、ここでは中心距離を使用
-            #   計算量が増加するが，障害物の形状を正確に反映
-            #   どうするかは保留
-            dist_sq = dx*dx + dy*dy
-            dist_center = np.sqrt(dist_sq)
+            # --- 2. 最短距離計算（全点との距離を計算） ---
+            min_dist_sq = 1e10
+            for p in range(n_points):
+                dx_p = c_x - obs_points_x[o, p]
+                dy_p = c_y - obs_points_y[o, p]
+                dist_sq = dx_p*dx_p + dy_p*dy_p
+                if dist_sq < min_dist_sq:
+                    min_dist_sq = dist_sq
             
-            # 表面間距離
-            dist_surface = dist_center - agent_radius
+            min_dist = np.sqrt(min_dist_sq)
+            dist_surface = min_dist - agent_radius
             
             if dist_surface < 0:
                  cost_k += force_factor * 1e6
             else:
                  cost_k += force_factor * np.exp(-dist_surface / force_sigma) * 1e4
 
-            # --- 3. Social Force (動的相互作用) ---
+            # --- 3. Social Force（中心間距離を使用） ---
+            dist_center = np.sqrt(dx*dx + dy*dy)
             # 近傍範囲チェック
             if dist_center > neighborhood_range:
                 continue
@@ -107,7 +114,7 @@ def compute_social_force_numba(
                 force_mag = np.abs(f_vel) + np.abs(f_ang)
                 cost_k += force_factor_social * force_mag * 1e4
 
-            # --- 4. Group Repulsion Force ---
+            # --- 4. 障害物同士の反発力（意味ない） ---
             if dist_center < overlap_distance and dist_center > 1e-6:
                 rep_mag = (overlap_distance - dist_center) / overlap_distance
                 cost_k += force_factor_group * rep_mag * 1e4
@@ -127,15 +134,36 @@ def Cost_Fcn(nstate, state, P, banned_point, t=None):
         state = state.T
     # 目標状態を複製
     g_state = np.tile(P['Goal_state'], (1, nstate.shape[1]))
-    g_state[3, :] = (g_state[0, :] - nstate[0, :]) * P['speed_rate']
-    g_state[4, :] = (g_state[1, :] - nstate[1, :]) * P['speed_rate']
-    g_state[5, :] = (g_state[2, :] - nstate[2, :]) * P['speed_rate']
+    
+    # 目標までの距離を計算
+    goal_distance = np.sqrt(
+        (g_state[0, :] - nstate[0, :]) ** 2 + 
+        (g_state[1, :] - nstate[1, :]) ** 2 + 
+        (g_state[2, :] - nstate[2, :]) ** 2
+    )
+    
+    # 目標近傍判定の閾値（例：1.0m）
+    near_goal_threshold = P.get('near_goal_threshold', 1.0)
+    
+    # 遠い場合：目標方向への速度を設定
+    # 近い場合：速度は小さくてもよい（位置のコストを重視）
+    speed_factor = np.where(goal_distance > near_goal_threshold, P['speed_rate'], P['speed_rate'] * 0.3)
+    
+    g_state[3, :] = (g_state[0, :] - nstate[0, :]) * speed_factor
+    g_state[4, :] = (g_state[1, :] - nstate[1, :]) * speed_factor
+    g_state[5, :] = (g_state[2, :] - nstate[2, :]) * speed_factor
+    
     diff_state = nstate - g_state
-    # 通常コスト
+    
+    # 通常コスト（位置のコストを目標近傍で強化）
     Cost = np.zeros(nstate.shape[1])
     for i in range(12):
         a = diff_state[i, :]
-        Cost = Cost + P['weight'][0, i] * a ** 2
+        weight = P['weight'][0, i]
+        # 位置のコスト（0,1,2番目）は目標近傍で増加
+        if i < 3:
+            weight = weight * np.where(goal_distance < near_goal_threshold, 2.0, 1.0)
+        Cost = Cost + weight * a ** 2
 
     # 禁止点コスト
     banned_valid = ~np.isnan(banned_point).all(axis=0)
@@ -183,7 +211,13 @@ def calculate_social_force_cost(nstate, state, P, t):
     collision_risk = P.get('collision_risk', 0.05)
     position_cov = P.get('position_covariance', np.eye(2) * 0.1**2)
     
-    kappa_threshold = -2 * np.log(collision_risk)
+    # κ の計算 
+    # κ = -2 ln(η_c * δ / A_r)
+    # η_c = 1/(2π * sqrt(det(Σ_c))) : 2次元正規分布の正規化定数
+    det_cov = np.linalg.det(position_cov)
+    eta_c = 1.0 / (2.0 * np.pi * np.sqrt(det_cov))
+    agent_area = P.get('agent_area', np.pi * agent_radius**2)
+    kappa_threshold = -2 * np.log(eta_c * collision_risk / agent_area)
     
     # 逆行列計算 (Try-Exceptは重いのでNumbaの外で)
     try:
@@ -198,29 +232,51 @@ def calculate_social_force_cost(nstate, state, P, t):
     if dynamic_obj is None:
         return np.zeros(n_samples)
     
-    # 障害物の中心座標リストを作成 (Numbaに渡すため配列化)
+    # 障害物の点群データを準備（2次元配列形式）
     # dynamic_obj shape: (2, points, n_obstacles) or (2, points)
-    obs_centers = []
+    obs_points_list_x = []
+    obs_points_list_y = []
+    obs_points_count_list = []
+    
     if dynamic_obj.ndim == 3:
         n_obstacles = dynamic_obj.shape[2]
+        max_points = dynamic_obj.shape[1]
         for i in range(n_obstacles):
-            pts = dynamic_obj[:, :, i]
+            pts = dynamic_obj[:, :, i]  # (2, n_points)
             if pts.size > 0:
-                obs_centers.append(pts.mean(axis=1))
+                obs_points_list_x.append(pts[0, :])
+                obs_points_list_y.append(pts[1, :])
+                obs_points_count_list.append(pts.shape[1])
     else:
         # 1つの障害物の場合
         if dynamic_obj.size > 0:
-            obs_centers.append(dynamic_obj.mean(axis=1))
+            obs_points_list_x.append(dynamic_obj[0, :])
+            obs_points_list_y.append(dynamic_obj[1, :])
+            obs_points_count_list.append(dynamic_obj.shape[1])
+            max_points = dynamic_obj.shape[1]
             
-    if not obs_centers:
+    if not obs_points_list_x:
         return np.zeros(n_samples)
-        
-    obs_centers_arr = np.array(obs_centers) # Shape: (M, 2)
+    
+    # 2次元配列に変換（各障害物の点群を行に配置）
+    # パディングして全て同じ長さにする
+    max_points = max(len(pts) for pts in obs_points_list_x)
+    n_obstacles = len(obs_points_list_x)
+    
+    obs_points_x_arr = np.zeros((n_obstacles, max_points), dtype=np.float64)
+    obs_points_y_arr = np.zeros((n_obstacles, max_points), dtype=np.float64)
+    
+    for i in range(n_obstacles):
+        n_pts = len(obs_points_list_x[i])
+        obs_points_x_arr[i, :n_pts] = obs_points_list_x[i]
+        obs_points_y_arr[i, :n_pts] = obs_points_list_y[i]
+    
+    obs_points_count_arr = np.array(obs_points_count_list, dtype=np.int64)
     
     # Numba関数を実行
     cost = compute_social_force_numba(
         nstate[0, :], nstate[1, :], nstate[3, :], nstate[4, :],  # エージェント情報
-        obs_centers_arr[:, 0], obs_centers_arr[:, 1],            # 障害物情報
+        obs_points_x_arr, obs_points_y_arr, obs_points_count_arr,  # 点群データ（2次元）
         cov_inv[0,0], cov_inv[0,1], cov_inv[1,0], cov_inv[1,1],  # 逆行列要素
         kappa_threshold,
         force_factor, force_sigma,
