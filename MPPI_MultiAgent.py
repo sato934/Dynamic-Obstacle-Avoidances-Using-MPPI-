@@ -4,7 +4,7 @@
 """
 import numpy as np
 import time
-from Cost_Fcn_Centralized import Cost_Fcn_Centralized
+from Cost_Fcn_MultiAgent import Cost_Fcn_Centralized
 from Sim_Model import Sim_Model
 from Term_Cost import Term_Cost
 from check import check
@@ -147,14 +147,15 @@ def check_agent_status(agent, step, agents_data):
     if agent.get('goal_reached', False) or agent.get('collision_occurred', False):
         return True
     
-    # 目標到達判定
-    distance_to_goal = np.linalg.norm(trial_state[0:3, step+1] - P['Goal_state'][0:3, 0])
+    # 目標到達判定（2D距離：x, yのみ）
+    distance_to_goal = np.linalg.norm(trial_state[0:2, step+1] - P['Goal_state'][0:2, 0])
     goal_threshold = P.get('goal_threshold', 0.2)
     
     if distance_to_goal <= goal_threshold:
-        print(f"Agent {agent['id']}: ゴール到達！")
+        print(f"Agent {agent['id']}: ゴール到達！ (2D距離: {distance_to_goal:.2f}m)")
         agent['goal_reached'] = True
-        trial_state[:, step+2:] = trial_state[:, step+1].reshape(-1, 1)
+        # 終了後の状態を現在位置で固定
+        trial_state[:, step+1:] = trial_state[:, step+1].reshape(-1, 1)
         return True
     
     # 障害物との衝突判定
@@ -170,16 +171,18 @@ def check_agent_status(agent, step, agents_data):
         return True
     
     # エージェント間の衝突判定
-    safety_distance = P.get('safety_distance', 0.5)  # 機体間の最小安全距離
-    my_pos = trial_state[0:3, step+1]
+    safety_distance = P.get('safety_distance', 0.7)  # 機体間の最小安全距離
+    my_pos = trial_state[0:2, step+1]
     
     for other_agent in agents_data:
         if other_agent['id'] == agent['id']:
             continue
         if other_agent.get('collision_occurred', False):
             continue  # 既に衝突した機体は無視
+        if other_agent.get('goal_reached', False):
+            continue  # ゴール済み機体は衝突判定しない
         
-        other_pos = other_agent['trial_state'][0:3, step+1]
+        other_pos = other_agent['trial_state'][0:2, step+1]
         distance = np.linalg.norm(my_pos - other_pos)
         
         if distance < safety_distance:
