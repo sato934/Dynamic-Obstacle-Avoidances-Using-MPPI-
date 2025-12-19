@@ -30,9 +30,9 @@ def Graph_x(ds_state_list, P, agbp_list, bpc_list, collision_list=None):
     ax.plot(P['Goal_state'][0,0], P['Goal_state'][1,0], marker='D', color=[0,0,1], markersize=5, markerfacecolor=[0,0,1], linewidth=2)
 
     gif_filename = 'animation.gif'
-    delay = 0.1  # フレーム間の遅延
+    delay = 0.03  # フレーム間の遅延
     images = []
-    frame_interval = 2  # フレームの間引き(表示を軽くする)
+    frame_interval = 1  # フレームの間引き(表示を軽くする)
 
     # 経路表示のフラグ（Falseにすると経路を非表示，障害物の動きを見るため）True or False
     show_trajectory = True
@@ -46,7 +46,13 @@ def Graph_x(ds_state_list, P, agbp_list, bpc_list, collision_list=None):
             line_objects.append(h)
     
     # 最大のステップ数を取得
-    max_steps = max(len(ds_state_list[i][:, 0]) for i in range(P['Trial_num']))
+    # 順番表示の場合は全試行の合計ステップ数が必要
+    if show_trajectory:
+        # 各試行のステップ数を合計
+        max_steps = sum(len(ds_state_list[i][:, 0]) for i in range(P['Trial_num']))
+    else:
+        # 障害物の動きだけを見る場合は、Trial_time全体を表示
+        max_steps = int(P['Trial_time'] / P['dt'])
     
     # 動的障害物用のパッチを先に作成
     if 'dynamic' in P and P['dynamic']:
@@ -94,6 +100,8 @@ def Graph_x(ds_state_list, P, agbp_list, bpc_list, collision_list=None):
     collision_markers_drawn = [False] * P['Trial_num']  # 衝突マーカーを描画したか追跡
     collision_step = [None] * P['Trial_num']  # 各試行の衝突ステップを記録
     goal_reached = [False] * P['Trial_num']  # 目標到達したか追跡
+    trial_start_step = [0] * P['Trial_num']  # 各試行の開始ステップを記録（全体のkでの開始位置）
+    trial_current_step = [0] * P['Trial_num']  # 各試行の現在のステップ（0から始まる独立カウンター）
     
     # 目標座標
     goal_x = P['Goal_state'][0, 0]
@@ -105,13 +113,27 @@ def Graph_x(ds_state_list, P, agbp_list, bpc_list, collision_list=None):
                         fontsize=12, verticalalignment='top',
                         bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
     
+    # 現在表示中の試行を追跡
+    current_trial = 0
+    
     for k in range(max_steps):
-        # 全試行の経路を同時に更新（経路表示がオンの場合のみ）
+        # 全試行の経路を1つずつ順番に更新（経路表示がオンの場合のみ）
         if show_trajectory:
             for i in range(P['Trial_num']):
                 # すでに目標到達または衝突した試行はスキップ
                 if goal_reached[i] or collision_markers_drawn[i]:
                     continue
+                
+                # 前の試行が完了するまで待機（順番表示制御）
+                if i > 0:
+                    prev_trial_finished = goal_reached[i-1] or collision_markers_drawn[i-1]
+                    if not prev_trial_finished:
+                        # 前の試行がまだ終わっていないので、この試行は表示しない
+                        continue
+                    # 前の試行が今完了した場合、この試行の開始ステップを記録
+                    if trial_start_step[i] == 0 and current_trial == i - 1:
+                        trial_start_step[i] = k
+                        current_trial = i
                 
                 ds_state = ds_state_list[i]
                 x = ds_state[:, 0]
@@ -120,23 +142,33 @@ def Graph_x(ds_state_list, P, agbp_list, bpc_list, collision_list=None):
                 agbp = agbp_list[i]
                 bpc = bpc_list[i]
                 
-                # 現在のステップが有効範囲外ならスキップ
-                if k >= len(x) or z[k] == 0:
+                # この試行の独立したステップカウンターを更新
+                step_in_trial = trial_current_step[i]
+                
+                # 現在のステップが有効範囲外なら試行完了
+                if step_in_trial >= len(x) or z[step_in_trial] == 0:
+                    goal_reached[i] = True  # 完了フラグを立てる
+                    # 次の試行に移行
+                    if i + 1 < P['Trial_num']:
+                        current_trial = i + 1
                     continue
                 
                 # 目標到達チェック
-                distance_to_goal = np.sqrt((x[k] - goal_x)**2 + (y[k] - goal_y)**2)
+                distance_to_goal = np.sqrt((x[step_in_trial] - goal_x)**2 + (y[step_in_trial] - goal_y)**2)
                 if distance_to_goal <= goal_threshold:
                     goal_reached[i] = True
                     # 目標到達時点まで経路を描画して終了
-                    line_objects[i].set_data(x[:k+1], y[:k+1])
+                    line_objects[i].set_data(x[:step_in_trial+1], y[:step_in_trial+1])
+                    # 次の試行に移行
+                    if i + 1 < P['Trial_num']:
+                        current_trial = i + 1
                     continue
                 
                 # 衝突チェック: 次のステップがゼロまたは範囲外なら衝突
                 is_collision = False
-                if k + 1 >= len(x):
+                if step_in_trial + 1 >= len(x):
                     is_collision = True
-                elif z[k+1] == 0:
+                elif z[step_in_trial+1] == 0:
                     is_collision = True
                 
                 # 衝突が検出された場合、×印を描画して以降の描画を停止
@@ -148,28 +180,38 @@ def Graph_x(ds_state_list, P, agbp_list, bpc_list, collision_list=None):
                         ax.plot(collision_pos[0], collision_pos[1], marker='x', 
                             color=[1-g, 0+g, 0], markersize=8, markeredgewidth=3)
                         # 経路は×印の1ステップ前（衝突位置）までで停止
-                        line_objects[i].set_data(x[:k], y[:k])
+                        line_objects[i].set_data(x[:step_in_trial], y[:step_in_trial])
                         collision_markers_drawn[i] = True
-                        collision_step[i] = k
+                        collision_step[i] = step_in_trial
+                        # 次の試行に移行
+                        if i + 1 < P['Trial_num']:
+                            current_trial = i + 1
                 # 衝突も目標到達もしていない場合は経路を更新
                 else:
-                    line_objects[i].set_data(x[:k+1], y[:k+1])
+                    line_objects[i].set_data(x[:step_in_trial+1], y[:step_in_trial+1])
                     
                     # ロック発生座標のマーカー描画
                     if agbp is not None and bpc is not None and bpc > 0:
                         for idx in range(bpc):
                             # 軌跡がロック発生座標に到達した時だけマーカーを描画
-                            if abs(x[k] - agbp[0, idx]) < 1e-6 and abs(y[k] - agbp[1, idx]) < 1e-6:
+                            if abs(x[step_in_trial] - agbp[0, idx]) < 1e-6 and abs(y[step_in_trial] - agbp[1, idx]) < 1e-6:
                                 ax.plot(
                                     agbp[0, idx], agbp[1, idx],
                                     marker='s', color=[0, 0, 1],
                                     markerfacecolor='none',
                                     markersize=6, markeredgewidth=1
                                 )
+                    
+                    # 次のステップに進める
+                    trial_current_step[i] += 1
         
         # 動的障害物の更新と描画（frame_interval毎に更新）
         if 'dynamic' in P and P['dynamic'] and k % frame_interval == 0:
-            current_time = k * P['dt']
+            # 現在表示中の試行の経過時間を使用
+            if show_trajectory:
+                current_time = trial_current_step[current_trial] * P['dt']
+            else:
+                current_time = k * P['dt']
             
             # 各障害物を更新
             for obs_idx in range(len(ax._dynamic_patches)):
@@ -225,9 +267,13 @@ def Graph_x(ds_state_list, P, agbp_list, bpc_list, collision_list=None):
                 # パッチの頂点を更新
                 ax._dynamic_patches[obs_idx].set_xy(shifted_circle.T)
         
-        # 時刻表示を更新
-        current_time = k * P['dt']
-        time_text.set_text(f'Time: {current_time:.1f}s')
+        # 時刻表示を更新（現在表示中の試行の経過時間）
+        if show_trajectory:
+            elapsed_time = trial_current_step[current_trial] * P['dt']
+            time_text.set_text(f'Trial {current_trial + 1} - Time: {elapsed_time:.1f}s')
+        else:
+            current_time = k * P['dt']
+            time_text.set_text(f'Time: {current_time:.1f}s')
         
         if k % frame_interval == 0:  # frame_interval毎にフレームを保存
             plt.draw()

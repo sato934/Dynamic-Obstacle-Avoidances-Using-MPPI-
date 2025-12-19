@@ -39,13 +39,34 @@ def Graph_MultiAgent(agents_data):
             yv = obj[1, :]
             ax.fill(xv, yv, color='blue', alpha=0.5, edgecolor='k')
     
-    # 各機体のスタート・ゴール座標
+    # 各機体のスタート・ゴール座標（機体ごとに色を統一）
     for idx, agent in enumerate(agents_data):
         P_agent = agent['P']
-        ax.plot(P_agent['Init_State'][0, 0], P_agent['Init_State'][1, 0], 
-               'o', color=[0.5, 0, 1], markersize=5, markerfacecolor=[0.5, 0, 1], linewidth=2)
+        # 機体ごとの色を計算（赤→緑のグラデーション）
+        g = 0 if n_agents == 1 else idx / (n_agents - 1)
+        agent_color = [1-g, 0+g, 0]
+        
+        # スタート位置（丸）
+        start_x = P_agent['Init_State'][0, 0]
+        start_y = P_agent['Init_State'][1, 0]
+        ax.plot(start_x, start_y, 
+                'o', color=agent_color, markersize=8, markerfacecolor=agent_color, linewidth=2, label=f'Agent {idx}')
+        
+        # スタート位置に機体番号を表示（1始まり）
+        ax.text(start_x, start_y, f'{idx + 1}', 
+                fontsize=8, 
+                fontweight='bold',
+                color=agent_color,
+                ha='center', 
+                va='center',
+                bbox=dict(boxstyle='circle,pad=0.3', 
+                        facecolor='white', 
+                        edgecolor=agent_color, 
+                        linewidth=2))
+        
+        # ゴール位置（ダイヤ）
         ax.plot(P_agent['Goal_state'][0, 0], P_agent['Goal_state'][1, 0], 
-               marker='D', color=[0, 0, 1], markersize=5, markerfacecolor=[0, 0, 1], linewidth=2)
+                marker='D', color=[0, 0, 1.], markersize=8, markerfacecolor=[0, 0, 1], linewidth=2)
     
     gif_filename = 'multi_agent_animation.gif'
     delay = 0.1
@@ -152,7 +173,7 @@ def Graph_MultiAgent(agents_data):
                     if collision_pos is not None and not collision_markers_drawn[idx]:
                         g = 0 if n_agents == 1 else idx / (n_agents - 1)
                         ax.plot(collision_pos[0], collision_pos[1], marker='x', 
-                               color=[1-g, 0+g, 0], markersize=8, markeredgewidth=3)
+                                color=[1-g, 0+g, 0], markersize=8, markeredgewidth=3)
                         line_objects[idx].set_data(x[:k], y[:k])
                         collision_markers_drawn[idx] = True
                 else:
