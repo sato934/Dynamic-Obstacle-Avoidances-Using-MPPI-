@@ -146,7 +146,7 @@ def Graph_x(ds_state_list, P, agbp_list, bpc_list, collision_list=None):
                 step_in_trial = trial_current_step[i]
                 
                 # 現在のステップが有効範囲外なら試行完了
-                if step_in_trial >= len(x) or z[step_in_trial] == 0:
+                if step_in_trial >= len(x):
                     goal_reached[i] = True  # 完了フラグを立てる
                     # 次の試行に移行
                     if i + 1 < P['Trial_num']:

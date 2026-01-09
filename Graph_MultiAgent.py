@@ -63,10 +63,16 @@ def Graph_MultiAgent(agents_data):
                         facecolor='white', 
                         edgecolor=agent_color, 
                         linewidth=2))
-        
-        # ゴール位置（ダイヤ）
-        ax.plot(P_agent['Goal_state'][0, 0], P_agent['Goal_state'][1, 0], 
-                marker='D', color=[0, 0, 1.], markersize=8, markerfacecolor=[0, 0, 1], linewidth=2)
+    
+    # ゴール位置（ダイヤ）― 1つだけ表示（original_goalまたは共通ゴール）
+    # original_goalがあればそれを使用、なければ最初の機体のゴール
+    if 'original_goal' in agents_data[0]:
+        goal_pos = agents_data[0]['original_goal']
+    else:
+        goal_pos = agents_data[0]['P']['Goal_state'][0:2, 0]
+    
+    ax.plot(goal_pos[0], goal_pos[1], 
+            marker='D', color=[0, 0, 1.], markersize=8, markerfacecolor=[0, 0, 1], linewidth=2)
     
     gif_filename = 'multi_agent_animation.gif'
     delay = 0.1
@@ -150,9 +156,13 @@ def Graph_MultiAgent(agents_data):
                 if k >= len(x) or z[k] == 0:
                     continue
                 
-                # 目標到達チェック
-                goal_x = agent['P']['Goal_state'][0, 0]
-                goal_y = agent['P']['Goal_state'][1, 0]
+                # 目標到達チェック（original_goalを使用）
+                if 'original_goal' in agent:
+                    goal_x = agent['original_goal'][0]
+                    goal_y = agent['original_goal'][1]
+                else:
+                    goal_x = agent['P']['Goal_state'][0, 0]
+                    goal_y = agent['P']['Goal_state'][1, 0]
                 goal_threshold = agent['P'].get('goal_threshold', 0.2)
                 distance_to_goal = np.sqrt((x[k] - goal_x)**2 + (y[k] - goal_y)**2)
                 

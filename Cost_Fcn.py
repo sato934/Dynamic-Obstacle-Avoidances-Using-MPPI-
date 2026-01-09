@@ -20,7 +20,7 @@ def compute_social_force_numba(
     
     costs = np.zeros(n_samples, dtype=np.float64)
 
-            # --- 1.　動的衝突確率チェックコスト計算 ---
+            # --- 1.　動的衝突確率コスト計算 ---
     for k in prange(n_samples):
         c_x = agent_pos_x[k]
         c_y = agent_pos_y[k]
@@ -67,7 +67,7 @@ def compute_social_force_numba(
             dist_surface = min_dist - agent_radius
             
             if dist_surface < 0:
-                 cost_k += force_factor * 1e6
+                 cost_k += force_factor * 1e6 #1e6
             else:
                  cost_k += force_factor * np.exp(-dist_surface / force_sigma) * 1e4
 
@@ -120,7 +120,7 @@ def compute_social_force_numba(
                 force_mag = np.abs(f_vel) + np.abs(f_ang)
                 cost_k += force_factor_social * force_mag * 1e4
 
-            # --- 4. 障害物同士の反発力（意味ない）論文から持ってきたが不要一応残しておく ---
+            # --- 4. 障害物同士の反発力（意味ない）論文から持ってきたが不要,一応残しておく ---
             if dist_center < overlap_distance and dist_center > 1e-6:
                 rep_mag = (overlap_distance - dist_center) / overlap_distance
                 cost_k += force_factor_group * rep_mag * 1e4 
@@ -242,29 +242,29 @@ def calculate_social_force_cost(nstate, state, P, t):
         # 進行方向の標準偏差（速度に比例）
         sigma_parallel = max(sigma_parallel_min, sigma_base + sigma_parallel_coeff * speed)
         sigma_perpendicular = sigma_base
-        
-        # 速度が十分にある場合のみ方向を考慮
-        if speed > 0.1:  # 閾値[m/s]
-            # 進行方向の角度
-            theta = np.arctan2(vel_y, vel_x)
-            cos_theta = np.cos(theta)
-            sin_theta = np.sin(theta)
-            
-            # 回転行列 R
-            R = np.array([[cos_theta, -sin_theta],
-                          [sin_theta,  cos_theta]])
-            
-            # 進行方向座標系での共分散行列
-            D = np.diag([sigma_parallel**2, sigma_perpendicular**2])
-            
-            # 元の座標系に変換: Σ = R * D * R^T
-            position_cov = R @ D @ R.T
-        else:
-            # 速度が小さい場合は等方的（円形）
-            position_cov = np.eye(2) * sigma_base**2
-    else:
-        # 固定の共分散行列
-        position_cov = P.get('position_covariance', np.eye(2) * 0.1**2)
+    #    
+    #    # 速度が十分にある場合のみ方向を考慮
+    #    if speed > 0.1:  # 閾値[m/s]
+    #        # 進行方向の角度
+    #        theta = np.arctan2(vel_y, vel_x)
+    #        cos_theta = np.cos(theta)
+    #       sin_theta = np.sin(theta)
+    #       
+    #        # 回転行列 R
+    #        R = np.array([[cos_theta, -sin_theta],
+    #                     [sin_theta,  cos_theta]])
+    #        
+    #        # 進行方向座標系での共分散行列
+    #        D = np.diag([sigma_parallel**2, sigma_perpendicular**2])
+    #        
+    #        # 元の座標系に変換: Σ = R * D * R^T
+    #        position_cov = R @ D @ R.T
+    #    else:
+    #        # 速度が小さい場合は等方的（円形）
+    #        position_cov = np.eye(2) * sigma_base**2
+    #else:
+    #    # 固定の共分散行列
+    #    position_cov = P.get('position_covariance', np.eye(2) * 0.1**2)
     
     # κ の計算  論文の計算式
     # κ = -2 ln(η_c * δ / A_r)

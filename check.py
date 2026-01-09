@@ -1,11 +1,49 @@
 import numpy as np
-from matplotlib.path import Path
+from numba import njit, prange
+#from matplotlib.path import Path
 
-def inpolygon(x, y, xv, yv):
-    # MATLAB の inpolygon 相当 (点が多角形内か判定)
-    points = np.vstack((x, y)).T
-    poly = np.vstack((xv, yv)).T
-    return Path(poly).contains_points(points)
+#def inpolygon(x, y, xv, yv):
+#    # MATLAB の inpolygon 相当 (点が多角形内か判定)
+#    points = np.vstack((x, y)).T
+#    poly = np.vstack((xv, yv)).T
+#    return Path(poly).contains_points(points)
+
+# Numbaでコンパイル可能な多角形内判定（Ray Casting法） 円の衝突判定を多角形で行っている意味？　中心からの距離で良いのでは？
+@njit(fastmath=True)
+def inpolygon_numba(x, y, poly_x, poly_y):
+    """
+    点 (x, y) が多角形 (poly_x, poly_y) の中にあるか判定
+    Return: 1 (True) or 0 (False)
+    """
+    num_vertices = len(poly_x)
+    inside = False
+    
+    j = num_vertices - 1
+    for i in range(num_vertices):
+        # 多角形の辺 (i, j) と、点から伸びる水平線が交差するか判定
+        xi, yi = poly_x[i], poly_y[i]
+        xj, yj = poly_x[j], poly_y[j]
+        
+        intersect = ((yi > y) != (yj > y)) and \
+                    (x < (xj - xi) * (y - yi) / (yj - yi + 1e-9) + xi)
+        
+        if intersect:
+            inside = not inside
+        j = i
+        
+    return 1 if inside else 0
+
+# まとめて判定するラッパー関数
+@njit(parallel=True, fastmath=True)
+def check_inpolygon_batch(xp, yp, xv, yv):
+    n = len(xp)
+    result = np.zeros(n, dtype=np.int64) # int64で返す
+    
+    # 複数の点を並列チェック
+    for k in prange(n):
+        result[k] = inpolygon_numba(xp[k], yp[k], xv, yv)
+        
+    return result
 
 def check(states1, states2, P, t=None): # t: 現在時刻（動的障害物用、Noneなら無視） 
     states1 = np.atleast_2d(states1)
@@ -136,8 +174,8 @@ def check(states1, states2, P, t=None): # t: 現在時刻（動的障害物用�
     for i in range(P['object'].shape[2]):
         xv = P['object'][0, :, i]
         yv = P['object'][1, :, i]
-        in1 = inpolygon(xp, yp, xv, yv)
-        in2 = inpolygon(xm, ym, xv, yv)
+        in1 = check_inpolygon_batch(xp, yp, xv, yv)
+        in2 = check_inpolygon_batch(xm, ym, xv, yv)
         fale += in1.astype(int) + in2.astype(int)
 
     # 動的障害物のチェック 
@@ -146,8 +184,8 @@ def check(states1, states2, P, t=None): # t: 現在時刻（動的障害物用�
         for i in range(dynamic_obj.shape[2]):
             xv = dynamic_obj[0, :, i]
             yv = dynamic_obj[1, :, i]
-            in1 = inpolygon(xp, yp, xv, yv)
-            in2 = inpolygon(xm, ym, xv, yv)
+            in1 = check_inpolygon_batch(xp, yp, xv, yv)
+            in2 = check_inpolygon_batch(xm, ym, xv, yv)
             fale += in1.astype(int) + in2.astype(int)
 
     fale = fale + (states1[2, :] <= 0)

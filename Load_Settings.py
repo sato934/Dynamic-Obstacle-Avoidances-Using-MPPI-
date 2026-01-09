@@ -13,7 +13,7 @@ def Load_Settings(i):
     
     P['dt'] = 0.2 #制御周期[s]　T＝1/s
     P['Trial_time'] = 40 #反復1回当たりの時間　単一20 マルチ40
-    P['Trial_num'] = 10 #反復回数
+    P['Trial_num'] = 3 #反復回数 3
     P['Horizon'] =3 #評価区間 6
     P['K'] = 5000 #経路数（サンプル数）　1000→5000
     P['Temp'] = 0.02 #逆温度
@@ -29,7 +29,7 @@ def Load_Settings(i):
     wcav = -np.inf #動的障害物回避の重み
 
     P['wbp'] = 3 * 10**6 #禁止点の重み
-    P['speed_rate'] = 1 #速度重視度合い 0:速度無視
+    P['speed_rate'] = 0 #速度重視度合い 0:速度無視
     P['vll'] = 1 #下限　可変乱数分散は不要のため固定
     P['vlu'] = 1 #上限  
     P['random_sample_rate'] = 0
@@ -42,7 +42,7 @@ def Load_Settings(i):
     
     # 動的衝突回避型のパラメータ
     P['agent_radius'] = 0.3  # 機体の半径[m]　0.35
-    P['force_sigma_obstacle'] = 0.15  # 障害物力の減衰パラメータ[m] (ギリギリまで小さく) 0.3 マルチ0.15 単一0.1
+    P['force_sigma_obstacle'] = 0.15 # 障害物力の減衰パラメータ[m] (ギリギリまで小さく)  マルチ0.15 単一0.1
     P['force_factor_obstacle'] = 250.0  # 障害物力の係数 (範囲を極小化した分、強度を大幅に上げる) 
     
     # Social Forceモデルのパラメータ
@@ -62,20 +62,19 @@ def Load_Settings(i):
     P['force_factor_group_repulsion'] = 10.0  # グループ反発力の係数 (近距離での強い反発)
     
     # マルチエージェント用パラメータ
-    P['safety_distance'] = 0.7  # エージェント間の最小安全距離[m] (agent_radius * 2 + マージン)
-    P['force_factor_inter_agent'] = 20.0  # エージェント間の力の係数（大きいほど強く回避）
-    P['force_sigma_inter_agent'] = 0.6    # エージェント間の減衰パラメータ[m]（大きいほど遠くから回避）
-    P['enable_queue_constraint'] = False  # 順序制約の有効化フラグ
-    P['queue_penalty_factor'] = 50.0     # 順序違反のペナルティ係数（大きいほど順序を守る）
-    P['queue_margin'] = 1.0              # 追い越し禁止マージン[m]（後続機体はこの距離以上遠くにいるべき）
+    P['safety_distance'] = 0.65  # エージェント間の最小安全距離[m] (agent_radius * 2 + マージン)
+    P['force_factor_inter_agent'] = 25.0  # エージェント間の力の係数（大きいほど強く回避）15.0
+    P['force_sigma_inter_agent'] = 0.7    # エージェント間の減衰パラメータ[m]（大きいほど遠くから回避）　0.4
+    P['goal_wait_time'] = 3.0  # ゴール到着後の待機時間[s]（作業時間）
+    P['goal_wait_distance'] = 2.5  # 待機距離[m]
     
     # 目標到達判定
-    P['goal_threshold'] = 0.2  # 目標到達とみなす距離の閾値[m] 0.2　マルチ0.4
+    P['goal_threshold'] = 0.4  # 目標到達とみなす距離の閾値[m] 0.2　マルチ0.4
     P['near_goal_threshold'] = 1.0  # 目標近傍での速度緩和を開始する距離[m]
     
     # マハラノビス距離による衝突判定
     P['agent_area'] = np.pi * P['agent_radius']**2  # 機体の面積 A_r [m^2]
-    P['collision_risk'] = 0.1 # 許容リスク δ (1%)
+    P['collision_risk'] = 0.1 # 許容リスク δ (1%)or(10%)
 
     # 速度依存の動的楕円パラメータ
     P['use_velocity_dependent_cov'] = True  # 速度依存の共分散行列を使用するか
@@ -127,27 +126,7 @@ def Load_Settings(i):
             P['object'] = np.expand_dims(P['object'], axis=2)
         P['Goal_state'] = np.array([0, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0]).reshape(-1, 1)
         P['axis'] = np.array([-5, 5, -2, 7])
-    elif i == 3:  #S字型 いらない
-        P['object'] = np.array([
-            [-3, -3, -1, -1, 1, 1, 3, 3],
-            [6, 2, 2, 4, 4, 0, 0, 6]
-        ])
-        # 2次元なら3次元に変換
-        if P['object'].ndim == 2:
-            P['object'] = np.expand_dims(P['object'], axis=2)
-        P['Goal_state'] = np.array([0, 8, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0]).reshape(-1, 1)
-        P['axis'] = np.array([-8, 8, -2, 10])    
-    elif i == 4: #U字型 開始地点を囲む　
-        P['object'] = np.array([
-            [-2, -2, -1.5, -1.5, 1.5, 1.5, 2, 2],
-            [7, 4, 4, 6.5, 6.5, 4, 4, 7]
-        ])
-        # 2次元なら3次元に変換
-        if P['object'].ndim == 2:
-            P['object'] = np.expand_dims(P['object'], axis=2)
-        P['Goal_state'] = np.array([0, 9, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0]).reshape(-1, 1)
-        P['axis'] = np.array([-8, 8, -2, 10])
-    elif i == 5: #移動障害物（円形）: スタートと目標の間をランダムに移動   11/10追加
+    elif i == 5:  #移動障害物（円形）: スタートと目標の間をランダムに移動   11/10追加
         # 目標位置（例）
         P['Goal_state'] = np.array([0, -4, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0]).reshape(-1, 1)
         P['axis'] = np.array([-8, 8, -6, 6])
@@ -195,71 +174,6 @@ def Load_Settings(i):
         # 初期速度（最初のウェイポイントに向かう）
         first_vel = (waypoints[0] - g) / segment_times[0]
         P['dynamic_velocity'] = first_vel
-        
-        # 開始位置を変更
-        P['Init_State'] = np.array([0, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0]).reshape(-1, 1)
-    elif i == 6:  # 複数の円形移動障害物　
-        P['Goal_state'] = np.array([0, -4, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0]).reshape(-1, 1)
-        P['axis'] = np.array([-8, 8, -6, 6])
-
-        # 静的障害物は無し（空配列）
-        P['object'] = np.zeros((2, 0, 1))
-
-        # 複数の動的円形障害物の設定
-        g = P['Goal_state'][:2, 0]  # ゴール座標
-        r = 0.3  # 円の半径
-        n_points = 16  # 円周上の点の数
-
-        num_circles = 19  # 円形障害物の数
-
-        circle_list = []
-        waypoints_list = []
-        segment_times_list = []
-        velocities = []
-
-        # X方向にズレを持たせて重なりを避けるためのオフセット
-        offsets = np.linspace(-2.0, 2.0, num_circles)
-
-        for idx in range(num_circles):
-            # 各障害物ごとにランダムな切り返し回数を設定
-            n_waypoints = np.random.randint(2, 5)
-            
-            # 初期位置を分散（ゴール付近から少しずつずらす）
-            center = g + np.array([offsets[idx], 0.0])
-
-            # 円周上の点を生成（時計回り）
-            theta = np.linspace(0, 2*np.pi, n_points, endpoint=False)
-            x = center[0] + r * np.cos(theta)
-            y = center[1] + r * np.sin(theta)
-            circle_points = np.stack([x, y], axis=0)
-            circle_list.append(circle_points)
-
-            # 指定された範囲内でランダムな中間地点を生成（移動範囲を狭くして速度を遅く）
-            waypoints = []
-            for _ in range(n_waypoints):
-                xw = np.random.uniform(-3, 3) + offsets[idx] * 0.3
-                yw = np.random.uniform(-3, 3)
-                waypoints.append(np.array([xw, yw]))
-            waypoints = np.array(waypoints)
-            waypoints_list.append(waypoints)
-
-            # 各ウェイポイントでの所要時間（正規化されるので実際の値は意味なし）
-            segment_times = np.random.uniform(1.0, 2.0, n_waypoints)  
-            segment_times = segment_times * (P['Trial_time'] / segment_times.sum())
-            segment_times_list.append(segment_times)
-
-            # 初期速度（最初のウェイポイントに向かう）
-            first_vel = (waypoints[0] - center) / segment_times[0]
-            velocities.append(first_vel)
-
-        P['dynamic'] = True
-        # 動的障害物点群を (2, n_points, num_circles) で格納
-        P['dynamic_obj'] = np.stack(circle_list, axis=2)
-        P['dynamic_waypoints'] = waypoints_list
-        P['dynamic_segment_times'] = segment_times_list
-        P['dynamic_start_time'] = 0.0
-        P['dynamic_end_time'] = float(P['Trial_time'])
-        P['dynamic_velocity'] = velocities
         
         # 開始位置を変更
         P['Init_State'] = np.array([0, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0]).reshape(-1, 1)
@@ -445,8 +359,8 @@ def Load_Settings(i):
         # 開始位置を変更
         P['Init_State'] = np.array([0, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0]).reshape(-1, 1)
     
-    # デフォルトの開始位置（i == 5, 6, 7, 8以外）
-    if i not in [5, 6, 7, 8]:
+    # デフォルトの開始位置（i == 5, 7, 8以外）
+    if i not in [5, 7, 8]:
         P['Init_State'] = np.array([0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0]).reshape(-1, 1)
     
     P['State_dim'] = P['Init_State'].size
