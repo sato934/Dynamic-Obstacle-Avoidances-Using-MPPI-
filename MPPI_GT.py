@@ -66,8 +66,8 @@ def MPPI_GT(P, agbp, bpc, parameter):
                     
         trial_state[:, i + 1] = Sim_Model(trial_state[:, i], seq_ctrl[:, :, i], P).flatten()
         
-        # 目標到達判定 (x, yのみ)
-        distance_to_goal = np.linalg.norm(trial_state[0:2, i+1] - P['Goal_state'][0:2, 0])
+        # 目標到達判定 (x, y, z の3D)
+        distance_to_goal = np.linalg.norm(trial_state[0:3, i+1] - P['Goal_state'][0:3, 0])
         goal_threshold = P.get('goal_threshold', 0.5)  # 目標到達とみなす距離の閾値[m]
         if distance_to_goal <= goal_threshold:
             print('ゴール！！')
@@ -84,15 +84,17 @@ def MPPI_GT(P, agbp, bpc, parameter):
             collision_position = trial_state[0:3, i].copy()
             print(f'衝突位置（1ステップ前）: x={collision_position[0]:.2f}, y={collision_position[1]:.2f}, z={collision_position[2]:.2f}')
             break
-        # bp_switch の分岐
+        # bp_switch の分岐 接近禁止点の設定 先行研究の残り，不要なら削除可
         if P.get('bp_switch', 0) == 1:
             if (
                 i >= int(P['check'] / P['dt'])
-                and np.linalg.norm(P['Goal_state'][0:2, 0] - trial_state[0:2, i]) >= 1
+                and np.linalg.norm(P['Goal_state'][0:3, 0] - trial_state[0:3, i]) >= 1
                 and bpc_interval <= 0                                                     #禁止点を探す
                 ): 
-                NGvec = P['Goal_state'][0:2, 0] - trial_state[0:2, i]
-                NGang = np.arccos(np.dot(NGvec, np.array([0, 1])) / np.linalg.norm(NGvec))
+                NGvec = P['Goal_state'][0:3, 0] - trial_state[0:3, i]  # 3Dベクトル
+                # xy平面での角度計算（従来通り）
+                NGvec_xy = NGvec[0:2]
+                NGang = np.arccos(np.dot(NGvec_xy, np.array([0, 1])) / (np.linalg.norm(NGvec_xy) + 1e-9))
                 Z = -NGang
                 ROT = np.array([
                     [np.cos(Z), -np.sin(Z)],

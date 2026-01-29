@@ -1,62 +1,14 @@
-#11/10追加 円形障害物に衝突した時何も起こっていない，複数ではない
-#11/12追加 経路を同時に描写，障害物に接触した際バツ印を表示 なぜかできない→円形障害物を障害物と認識していない背景のようになっている静止障害物のように認識させる必要がある
-#課題１ 衝突判定がうまくいっていない，←クリア
-#課題２ 新たなコスト関数を導入する← Qprobは導入できていない マハラノビス距離使っていない　できたかな
-#課題３ パラメータの調整 ←障害物がすくないとうまくいくが多いとうまくいかない
-#課題４ 動的障害物の数を増やすと衝突する　よけてはいる　もう少し
-#課題５ 効率悪い 障害物からの距離でコストを付与するか決める例半径より半分小さい
-#課題６ 時間遅すぎ GPUベースでやってみる
-#やってみること  障害物正面にある時離れるのではなく止まるようにしてみる　詳しくは考える
-# i=7　評価区間３　サンプル数５０００　が１番良い 許容リスクを変えてみるのもありかも
-# iHorizonが長い場合:
-
-#15ステップ分の目標コスト累積 = 25,000 × 15 = 375,000
-#障害物コストは接近時の数ステップのみ = 65,766 × 3 ≈ 197,298
-#目標コストが勝ってしまう
-#正しい対策
-#Horizon=10秒に戻して、コストバランスを調整すべき
-#優先されるAgentが衝突した時後ろのAgentはゴールできない問題を解決，グラフの描画ずれている？衝突しているのに反応せず回避している
-
-
-##const double distanceThreshold = 1.0;
-##if (distance >= distanceThreshold) {
-##   // trivial case: agent is far away
-##   Ped::Tvector desiredDirection = diff.normalized();
-##    Ped::Tvector force =
-##        (desiredDirection * agentIn.getVmax() - agentIn.getVelocity()) /
-##        agentIn.getRelaxationTime();
-##    if (desiredDirectionOut != nullptr) {
-##      *desiredDirectionOut = desiredDirection;
-##    }
-##    return force;
-##  } else {
-##    // agent is already very close to the waypoint
-##    Ped::Tvector velocity = agentIn.getVelocity();
-##    // → decelerate agent
-##    Ped::Tvector decelerationForce = -velocity / agentIn.getRelaxationTime();
-##    // → move agent to the correct place
-##    Ped::Tvector projection = velocity * agentIn.getRelaxationTime();
-##    Ped::Tvector projectedDiff = diff - projection;
-##    Ped::Tvector projectionForce = projectedDiff / agentIn.getRelaxationTime();
-##
-##    Ped::Tvector force = decelerationForce + projectionForce;
-##    if (desiredDirectionOut != nullptr) {
-##      *desiredDirectionOut = velocity;
-##    }
-##    return force;
-##  }                     エージェントが遠い場合ウェイポイントへ向かう力を計算エージェントが近い場合(distance < 1.0)減速して正確な位置に移動する力を計算
-##                        速度を考慮する　今は考慮していない位置の重みで何とかしている状況　　もしかしたらつかうかも
 import numpy as np
 from Load_Settings import Load_Settings
 from MPPI_GT import MPPI_GT
 from Graph_x import Graph_x
+from Graph_Distance import plot_distance_time_graph
 from datetime import datetime
-
 
 # --- 初期化 ---
 print(datetime.now())
 
-P = Load_Settings(7)  # パラメータ設定の読み込み 【ここの引数を変えることで障害物の形状を変更可能】
+P = Load_Settings(8)  # パラメータ設定の読み込み 【ここの引数を変えることで障害物の形状を変更可能】
 np.random.seed(P['seed'])
 
 # データ格納用
@@ -91,6 +43,22 @@ for i in range(P['Trial_num']):
     print(f"Elapsed: {t1-t0}")
 
 Graph_x(ds_state_list, P, agbp_list, bpc_list, collision_list)
+
+# 距離時系列グラフの作成
+print("\n=== 距離時系列グラフを作成中 ===")
+# ds_state_listの各要素をndarrayに変換
+ds_state_array_list = []
+for ds in ds_state_list:
+    if isinstance(ds, np.ndarray):
+        # shape: (num_steps, 12) -> (12, num_steps) に転置
+        ds_state_array_list.append(ds.T)
+    else:
+        ds_state_array_list.append(ds)
+
+min_dist, min_time, obs_type = plot_distance_time_graph(
+    ds_state_array_list, P, 
+    save_path='ani_distance_time.png'
+)
 
 print('Finish!!')
 print(datetime.now())
