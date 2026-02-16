@@ -1,6 +1,6 @@
-"""
-集中型マルチエージェントMPPI (2D版 - エラー修正済み)
-- 2D (x, y) のみで計算
+
+"""集中型マルチエージェントMPPI (3D版 - エラー修正済み)
+- 3D (x, y, z) で計算
 - 型エラー対策: dtype=np.float64, .astype(np.float64) を維持
 - 形状エラー対策: .reshape() による次元整合を維持
 - Weightブースト & 制御リセット & 無敵判定 を維持
@@ -20,11 +20,13 @@ class GoalManager:
     
     def __init__(self, n_agents, goal_pos, wait_time=5.0, goal_threshold=0.2):
         self.n_agents = n_agents
-        self.goal_pos = goal_pos # (x, y) 2D
+        self.goal_pos = goal_pos # (x, y, z) 3D
         self.wait_time = wait_time
         self.goal_threshold = goal_threshold
         
         self.arrival_times = np.zeros(n_agents)
+        self.lock_acquired_times = np.full(n_agents, -1.0)  # ロック取得時刻
+        self.ghost_times = np.full(n_agents, -1.0)  # ゴースト化時刻
         self.states = np.zeros(n_agents, dtype=int)
         self.goal_locked_by = -1
 
@@ -36,8 +38,8 @@ def MPPI_MultiAgent(agents_data, banned_point):
     state_dim = P['State_dim']
     ctrl_dim = P['Ctrl_dim']
     
-    # (x, y) のみ取得
-    common_goal_pos = agents_data[0]['P']['Goal_state'][0:2, 0]
+    # (x, y, z) 3次元取得
+    common_goal_pos = agents_data[0]['P']['Goal_state'][0:3, 0]
     wait_time = P.get('goal_wait_time', 5.0)
     goal_threshold = P.get('goal_threshold', 0.2)
     lock_distance = P.get('goal_lock_distance', 1.0)
@@ -59,8 +61,8 @@ def MPPI_MultiAgent(agents_data, banned_point):
         agent['ghosted'] = False 
         
         if 'original_goal' not in agent:
-            # 【2D】0:2
-            agent['original_goal'] = P_agent['Goal_state'][0:2, 0].copy()
+            # 【3D】0:3
+            agent['original_goal'] = P_agent['Goal_state'][0:3, 0].copy()
         if 'original_max_approach_speed' not in agent:
             agent['original_max_approach_speed'] = P_agent.get('max_approach_speed', 2.0)
         
@@ -83,6 +85,7 @@ def MPPI_MultiAgent(agents_data, banned_point):
                     print(f"[Time {current_time:.1f}s] Agent {agent['id']}: 作業完了 -> ゴースト化")
                     agent['ghosted'] = True
                     manager.states[idx] = GoalManager.GHOSTED
+                    manager.ghost_times[idx] = current_time  # ゴースト化時刻を記録
                     if manager.goal_locked_by == idx:
                         manager.goal_locked_by = -1
 
@@ -94,8 +97,8 @@ def MPPI_MultiAgent(agents_data, banned_point):
                     not agent.get('ghosted', False) and
                     manager.states[idx] == GoalManager.ACTIVE):
                     
-                    # 【2D】0:2
-                    curr_pos = agent['trial_state'][0:2, step]
+                    # 【3D】0:3
+                    curr_pos = agent['trial_state'][0:3, step]
                     dist = np.linalg.norm(curr_pos - agent['original_goal'])
                     active_distances.append((idx, dist, agent['id']))
             
@@ -105,6 +108,7 @@ def MPPI_MultiAgent(agents_data, banned_point):
                 
                 if nearest_dist < lock_distance:
                     manager.goal_locked_by = nearest_idx
+                    manager.lock_acquired_times[nearest_idx] = current_time  # ロック取得時刻を記録
                     
                     # --- ★【修正】制御リセット (型・形状エラー対策) ---
                     init_u = agents_data[nearest_idx]['P']['initial_controll']
@@ -123,8 +127,8 @@ def MPPI_MultiAgent(agents_data, banned_point):
             if agent.get('collision_occurred', False) or agent.get('ghosted', False):
                 continue
             
-            # 【2D】0:2
-            curr_pos = agent['trial_state'][0:2, step]
+            # 【3D】0:3
+            curr_pos = agent['trial_state'][0:3, step]
             orig_goal = agent['original_goal']
             dist_to_orig = np.linalg.norm(curr_pos - orig_goal)
             
@@ -133,11 +137,32 @@ def MPPI_MultiAgent(agents_data, banned_point):
                     manager.states[idx] = GoalManager.AT_GOAL_WORKING
                     manager.arrival_times[idx] = current_time
                     print(f"[Time {current_time:.1f}s] Agent {agent['id']}: ゴール到達・作業開始")
+                    
+                    # ホバリング推力を計算（水平姿勢を仮定）
+                    m = agent['P']['m']
+                    g = agent['P']['g']
+                    F_hover = m * g
+                    
+                    # 即座に位置・速度・制御入力を固定
+                    agent['trial_state'][0:3, step] = manager.goal_pos
+                    agent['trial_state'][3:6, step] = 0.0
+                    agent['seq_ctrl'][:, :, step:] = F_hover
+                    
                 
-                agent['P']['Goal_state'][0:2, 0] = orig_goal
+                agent['P']['Goal_state'][0:3, 0] = orig_goal
             
             elif manager.states[idx] == GoalManager.AT_GOAL_WORKING:
-                agent['P']['Goal_state'][0:2, 0] = orig_goal
+                agent['P']['Goal_state'][0:3, 0] = orig_goal
+                
+                # ホバリング推力を計算
+                m = agent['P']['m']
+                g = agent['P']['g']
+                F_hover = m * g
+                
+                # 位置・速度を固定し、ホバリング推力を維持
+                agent['trial_state'][0:3, step] = manager.goal_pos
+                agent['trial_state'][3:6, step] = 0.0
+                agent['seq_ctrl'][:, :, step:] = F_hover
 
         # [Step D] weight のブースト
         boost_factor = 5.0 
@@ -192,15 +217,15 @@ def MPPI_MultiAgent(agents_data, banned_point):
                 # ★修正: ゴースト機体は予測内でも完全凍結 (-9999)
                 if agent.get('ghosted', False):
                     next_agent_state = agent_state.copy()
-                    next_agent_state[0:2, :] = -9999.0  # 位置を遥か彼方へ
-                    next_agent_state[3:5, :] = 0.0      # 速度ゼロ
+                    next_agent_state[0:3, :] = -9999.0  # 位置を遥か彼方へ (3D)
+                    next_agent_state[3:6, :] = 0.0      # 速度ゼロ (vx,vy,vz)
                     next_sim_state_list.append(next_agent_state)
                 
                 # ★修正: 作業中機体はその場(ゴール)に固定
                 elif manager.states[idx] == GoalManager.AT_GOAL_WORKING:
                     next_agent_state = agent_state.copy()
-                    next_agent_state[0:2, :] = manager.goal_pos.reshape(2, 1)
-                    next_agent_state[3:5, :] = 0.0
+                    next_agent_state[0:3, :] = manager.goal_pos.reshape(3, 1)  # 3D
+                    next_agent_state[3:6, :] = 0.0  # vx,vy,vz
                     next_sim_state_list.append(next_agent_state)
                 
                 # 通常機体: 普通にシミュレーション
@@ -231,6 +256,7 @@ def MPPI_MultiAgent(agents_data, banned_point):
         for idx, agent in enumerate(agents_data):
             if agent.get('collision_occurred', False) or agent.get('ghosted', False):
                 continue
+            # AT_GOAL_WORKING状態ではホバリング推力を維持するため更新しない
             if manager.states[idx] == GoalManager.AT_GOAL_WORKING:
                 continue
             
@@ -249,10 +275,10 @@ def MPPI_MultiAgent(agents_data, banned_point):
         all_finished = True
         for idx, agent in enumerate(agents_data):
             if agent.get('ghosted', False):
-                # 【2D】Ghost退避
+                # 【3D】Ghost退避
                 if agent['trial_state'][0, step] > -9000:
                     agent['trial_state'][:, step + 1] = agent['trial_state'][:, step]
-                    agent['trial_state'][0:2, step + 1] = np.array([-9999.0, -9999.0])
+                    agent['trial_state'][0:3, step + 1] = np.array([-9999.0, -9999.0, -9999.0])
                 else:
                     agent['trial_state'][:, step + 1] = agent['trial_state'][:, step]
                 continue
@@ -262,9 +288,9 @@ def MPPI_MultiAgent(agents_data, banned_point):
             
             if manager.states[idx] == GoalManager.AT_GOAL_WORKING:
                 agent['trial_state'][:, step + 1] = agent['trial_state'][:, step].copy()
-                # 【2D】位置・速度固定
-                agent['trial_state'][0:2, step + 1] = manager.goal_pos
-                agent['trial_state'][3:5, step + 1] = 0.0
+                # 【3D】位置・速度固定
+                agent['trial_state'][0:3, step + 1] = manager.goal_pos
+                agent['trial_state'][3:6, step + 1] = 0.0
             else:
                 # ★Stateを (12, 1) に、Ctrlを (4, 1) に強制整形して渡す
                 # これで (1, 4) が混ざって計算がおかしくなるのを防ぎます
@@ -286,10 +312,15 @@ def MPPI_MultiAgent(agents_data, banned_point):
             print(f"全機体が終了(Step {step+1})")
             break
     
+    # 各エージェントにロック取得時刻とゴースト化時刻を記録
+    for idx, agent in enumerate(agents_data):
+        agent['lock_acquired_time'] = manager.lock_acquired_times[idx]
+        agent['ghost_time'] = manager.ghost_times[idx]
+    
     return agents_data
 
 def check_agent_status(agent, step, agents_data, manager, agent_idx):
-    """衝突判定 (2D)"""
+    """衝突判定 (3D)"""
     P = agent['P']
     trial_state = agent['trial_state']
     
@@ -317,14 +348,14 @@ def check_agent_status(agent, step, agents_data, manager, agent_idx):
     
     # 機体間衝突 
     safety_distance = P.get('safety_distance', 0.7)
-    my_pos = trial_state[0:2, step+1] # 2D
+    my_pos = trial_state[0:3, step+1] # 3D
     
     for other_agent in agents_data:
         if other_agent['id'] == agent['id']: continue
         if other_agent.get('collision_occurred'): continue
         if other_agent.get('ghosted'): continue
         
-        other_pos = other_agent['trial_state'][0:2, step+1] # 2D
+        other_pos = other_agent['trial_state'][0:3, step+1] # 3D
         dist = np.linalg.norm(my_pos - other_pos)
         
         if dist < safety_distance:

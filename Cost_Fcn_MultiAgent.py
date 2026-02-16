@@ -1,6 +1,6 @@
 """
-集中型マルチエージェント用コスト関数 (v5 - 2D版)
-- エージェント間距離コストを 2D (x, y) で計算
+集中型マルチエージェント用コスト関数 (v6 - 3D版)
+- エージェント間距離コストを 3D (x, y, z) で計算
 - 全機体が対称的に衝突回避を行う
 """
 import numpy as np
@@ -9,13 +9,13 @@ from Cost_Fcn import Cost_Fcn
 
 @njit(fastmath=True, parallel=True)
 def compute_inter_agent_distance_cost_numba(
-    positions_x, positions_y, 
+    positions_x, positions_y, positions_z,
     finished_flags, 
     n_agents, n_samples,
     safety_distance, force_factor, force_sigma
 ):
     """
-    エージェント間の距離コストをNumbaで高速計算 (2D)
+    エージェント間の距離コストをNumbaで高速計算 (3D)
     """
     costs = np.zeros(n_samples, dtype=np.float64)
     
@@ -32,9 +32,10 @@ def compute_inter_agent_distance_cost_numba(
                 
                 dx = positions_x[i, k] - positions_x[j, k]
                 dy = positions_y[i, k] - positions_y[j, k]
+                dz = positions_z[i, k] - positions_z[j, k]
                 
-                # 2D距離
-                dist = np.sqrt(dx*dx + dy*dy)
+                # 3D距離
+                dist = np.sqrt(dx*dx + dy*dy + dz*dz)
                 dist_surface = dist - safety_distance
                 
                 if dist_surface < 0:
@@ -50,7 +51,7 @@ def compute_inter_agent_distance_cost_numba(
 
 def Cost_Fcn_Centralized(combined_nstate, combined_state, agents_data, banned_point, t=None):
     """
-    集中型コスト関数 (2D)
+    集中型コスト関数 (3D)
     """
     n_agents = len(agents_data)
     state_dim = agents_data[0]['P']['State_dim'] 
@@ -65,21 +66,23 @@ def Cost_Fcn_Centralized(combined_nstate, combined_state, agents_data, banned_po
         agent_cost = Cost_Fcn(agent_nstate, agent_state, agent['P'], banned_point, t)
         total_cost += agent_cost
     
-    # 2. エージェント間距離コスト(Numba高速化版)
+    # 2. エージェント間距離コスト(Numba高速化版, 3D)
     P = agents_data[0]['P']
     agent_radius = P.get('agent_radius', 0.35)
     force_factor = P.get('force_factor_inter_agent', 10.0)
     force_sigma = P.get('force_sigma_inter_agent', 0.8)
     safety_distance = agent_radius * 2.0
     
-    # 全機体の位置を抽出 (n_agents, n_samples)
+    # 全機体の位置を抽出 (n_agents, n_samples), 3D対応
     positions_x = np.zeros((n_agents, n_samples))
     positions_y = np.zeros((n_agents, n_samples))
+    positions_z = np.zeros((n_agents, n_samples))
     
     for i in range(n_agents):
-        # 状態ベクトルの 0, 1番目が x, y であると仮定
+        # 状態ベクトルの 0, 1, 2番目が x, y, z であると仮定
         positions_x[i, :] = combined_nstate[i*state_dim, :]       # x
         positions_y[i, :] = combined_nstate[i*state_dim+1, :]     # y
+        positions_z[i, :] = combined_nstate[i*state_dim+2, :]     # z
     
     # 終了済みフラグを抽出
     finished_flags = np.array([
@@ -88,9 +91,9 @@ def Cost_Fcn_Centralized(combined_nstate, combined_state, agents_data, banned_po
         for agent in agents_data
     ], dtype=np.bool_)
     
-    # Numba関数を実行
+    # Numba関数を実行 (3D)
     inter_agent_cost = compute_inter_agent_distance_cost_numba(
-        positions_x, positions_y,
+        positions_x, positions_y, positions_z,
         finished_flags,
         n_agents, n_samples,
         safety_distance, force_factor, force_sigma

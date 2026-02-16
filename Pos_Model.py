@@ -66,9 +66,11 @@ def Pos_Model(State, Ctrl, P):
     K2 = np.vstack([np.zeros(way_num), np.zeros(way_num), F])
     r_dd = np.zeros((3, way_num))
 
-    # 式(1) 実行
-    for i in range(way_num):
-        r_dd[:, i] = (K1[:, i] + R[:, :, i] @ K2[:, i]) * (1 / m[i])
+    # 式(1) 実行 (ベクトル化で高速化)
+    R_batch = np.transpose(R, (2, 0, 1))  # (way_num, 3, 3)
+    K2_batch = K2.T[:, :, np.newaxis]     # (way_num, 3, 1)
+    RK2 = (R_batch @ K2_batch).squeeze(-1).T  # (3, way_num)
+    r_dd = (K1 + RK2) / m[np.newaxis, :]
 
     # 加速度r_dd が分かったので，それを使って新座標と新速度を求める
     hv = r_dd * times

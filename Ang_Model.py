@@ -26,13 +26,18 @@ def Ang_Model(State, Ctrl, P):
     pqr = Ctrl[1:4, :]
 
     dot_avwxyz = np.zeros((3, way_num))  # dot_angle_velocity_world_xyz
-    for i in range(way_num):
-        try:
-            u = np.linalg.inv(O[:, :, i])
-        except np.linalg.LinAlgError:
-            u = np.zeros((3, 3))
-        u = np.nan_to_num(u)
-        dot_avwxyz[:, i] = u @ pqr[:, i]
+    # バッチ行列逆変換で高速化 (ループ不要)
+    O_batch = np.transpose(O, (2, 0, 1))  # (way_num, 3, 3)
+    # 特異行列チェック: 行列式がゼロに近い場合はゼロ行列に置換
+    dets = np.linalg.det(O_batch)
+    valid = np.abs(dets) > 1e-10
+    inv_batch = np.zeros_like(O_batch)
+    if np.any(valid):
+        inv_batch[valid] = np.linalg.inv(O_batch[valid])
+    inv_batch = np.nan_to_num(inv_batch)
+    # バッチ行列ベクトル積: (way_num, 3, 3) @ (way_num, 3, 1) -> (way_num, 3, 1)
+    pqr_batch = pqr.T[:, :, np.newaxis]  # (way_num, 3, 1)
+    dot_avwxyz = (inv_batch @ pqr_batch).squeeze(-1).T  # (3, way_num)
 
     dot_phi = dot_avwxyz[0, :]
     dot_theta = dot_avwxyz[1, :]
