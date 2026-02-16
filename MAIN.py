@@ -1,3 +1,5 @@
+## 重要　OneDrive は使うな　ごみすぎる　絶対にGitHubに上げてくれ
+
 import numpy as np
 from Load_Settings import Load_Settings
 from MPPI_GT import MPPI_GT

@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 import imageio
 from matplotlib.backends.backend_agg import FigureCanvasAgg
+from check import inpolygon_numba, point_line_segment_distance
 
 def draw_sphere_surface(ax, center, radius, color='red', alpha=0.5):
     """真の3D球体を描画（plot_surface使用）"""
@@ -440,6 +441,31 @@ def save_final_state_4views(ds_state_list, P, collision_list=None, obs_list=None
         os.makedirs(save_dir)
         print(f"フォルダ作成: {save_dir}")
     
+    def _find_first_obstacle_collision(x, y, z, P_local):
+        """パスの中で障害物に最初に衝突するステップを探す"""
+        if 'object' not in P_local or P_local['object'].size == 0:
+            return None, None
+        agent_radius = P_local.get('agent_radius', 0.3)
+        wall_height = P_local.get('object_height', P_local.get('wall_height', 3.0))
+        n_obs = P_local['object'].shape[2]
+        for step in range(len(x)):
+            if step > 0 and x[step] == 0 and y[step] == 0 and z[step] == 0:
+                break  # ゼロ埋め領域
+            for obj_idx in range(n_obs):
+                xv = P_local['object'][0, :, obj_idx]
+                yv = P_local['object'][1, :, obj_idx]
+                if 0 <= z[step] <= wall_height:
+                    if inpolygon_numba(x[step], y[step], xv, yv):
+                        return step, np.array([x[step], y[step], z[step]])
+                    n_verts = len(xv)
+                    for e in range(n_verts):
+                        e_next = (e + 1) % n_verts
+                        dist = point_line_segment_distance(
+                            x[step], y[step], xv[e], yv[e], xv[e_next], yv[e_next])
+                        if dist < agent_radius:
+                            return step, np.array([x[step], y[step], z[step]])
+        return None, None
+    
     # 配置: (subplot位置, elev, azim, title, is_2d, use_y, use_z)
     # subplot: 1=左上, 2=右上, 3=左下, 4=右下
     views = [
@@ -464,12 +490,36 @@ def save_final_state_4views(ds_state_list, P, collision_list=None, obs_list=None
         
         final_step = len(x) - 1
         goal_reached = False
+        has_collision = (collision_list is not None and trial_idx < len(collision_list) and collision_list[trial_idx] is not None)
+        
+        # 衝突時：最後の有効ステップを検出（ゼロ埋めされた範囲を除外）
+        if has_collision:
+            for step in range(len(x) - 1, 0, -1):
+                if np.any(ds_state[step, :] != 0):
+                    final_step = step
+                    break
+        
         for step in range(len(x)):
             dist_to_goal = np.sqrt((x[step]-goal_pos[0])**2 + (y[step]-goal_pos[1])**2 + (z[step]-goal_pos[2])**2)
             if dist_to_goal <= goal_threshold:
                 final_step = step
                 goal_reached = True
                 break
+        
+        # 衝突位置の取得
+        collision_pos = collision_list[trial_idx] if has_collision else None
+        
+        # 衝突が地面付近の場合、パスから障害物との実際の衝突地点を探索
+        if has_collision and collision_pos is not None:
+            min_height = P.get('min_height', 0.0)
+            agent_radius = P.get('agent_radius', 0.3)
+            # collision_posが地面/天井付近の場合、障害物との最初の衝突を探す
+            if collision_pos[2] <= min_height + agent_radius + 0.5:
+                obs_step, obs_pos = _find_first_obstacle_collision(x, y, z, current_P)
+                if obs_step is not None:
+                    collision_pos = obs_pos
+                    final_step = obs_step
+                    print(f"    障害物衝突地点を検出: step={obs_step}, pos=({obs_pos[0]:.2f}, {obs_pos[1]:.2f}, {obs_pos[2]:.2f})")
         
         final_time = final_step * P['dt']
         
@@ -509,17 +559,18 @@ def save_final_state_4views(ds_state_list, P, collision_list=None, obs_list=None
                 ax.plot(start_coords[0], start_coords[1], 'o', color=[0.5, 0, 1], markersize=10, markeredgecolor='k', markeredgewidth=2)
                 ax.plot(goal_coords[0], goal_coords[1], 'D', color=[0, 0, 1], markersize=10, markeredgecolor='k', markeredgewidth=2)
                 
-                # 経路（最終ステップまで）
+                # 経路（衝突時は1ステップ前まで）
+                draw_end = max(final_step - 1, 0) if has_collision else final_step
                 cx, cy = [], []
-                for s in range(final_step + 1):
+                for s in range(draw_end + 1):
                     c = get_2d_coords(x[s], y[s], z[s], use_y, use_z)
                     cx.append(c[0]); cy.append(c[1])
                 ax.plot(cx, cy, color='green', linewidth=2)
                 
-                # 最終位置マーカー
-                final_coords = get_2d_coords(x[final_step], y[final_step], z[final_step], use_y, use_z)
-                if collision_list is not None and trial_idx < len(collision_list) and collision_list[trial_idx] is not None:
-                    ax.plot(final_coords[0], final_coords[1], 'x', color='red', markersize=15, markeredgewidth=3)
+                # 最終位置マーカー（衝突時はcollision_posの位置に×印）
+                if collision_pos is not None:
+                    coll_coords = get_2d_coords(collision_pos[0], collision_pos[1], collision_pos[2], use_y, use_z)
+                    ax.plot(coll_coords[0], coll_coords[1], 'x', color='red', markersize=15, markeredgewidth=3)
                 
                 # 動的障害物（最終時刻の位置）
                 if 'dynamic' in current_P and current_P['dynamic']:
@@ -538,12 +589,13 @@ def save_final_state_4views(ds_state_list, P, collision_list=None, obs_list=None
                 ax.scatter(x[0], y[0], z[0], color=[0.5, 0, 1], s=100, marker='o', edgecolors='k', linewidth=2)
                 ax.scatter(goal_pos[0], goal_pos[1], goal_pos[2], color=[0, 0, 1], s=100, marker='D', edgecolors='k', linewidth=2)
                 
-                # 経路（最終ステップまで）
-                ax.plot(x[:final_step+1], y[:final_step+1], z[:final_step+1], color='green', linewidth=2)
+                # 経路（衝突時は1ステップ前まで）
+                draw_end = max(final_step - 1, 0) if has_collision else final_step
+                ax.plot(x[:draw_end+1], y[:draw_end+1], z[:draw_end+1], color='green', linewidth=2)
                 
-                # 最終位置マーカー
-                if collision_list is not None and trial_idx < len(collision_list) and collision_list[trial_idx] is not None:
-                    ax.scatter(x[final_step], y[final_step], z[final_step], color='red', marker='x', s=150, linewidths=3)
+                # 最終位置マーカー（衝突時はcollision_posの位置に×印）
+                if collision_pos is not None:
+                    ax.scatter(collision_pos[0], collision_pos[1], collision_pos[2], color='red', marker='x', s=150, linewidths=3)
                 
                 # 動的障害物（最終時刻の位置）
                 if 'dynamic' in current_P and current_P['dynamic']:

@@ -327,18 +327,60 @@ def check_agent_status(agent, step, agents_data, manager, agent_idx):
     if agent.get('collision_occurred', False) or agent.get('ghosted', False):
         return True
     
-    # ★【安全対策】無敵判定を一番最初に配置
-    if manager.goal_locked_by == agent_idx or manager.states[agent_idx] == GoalManager.AT_GOAL_WORKING:
-        return False
+    # ロック取得中かどうかのフラグ
+    is_locked = (manager.goal_locked_by == agent_idx or 
+                 manager.states[agent_idx] == GoalManager.AT_GOAL_WORKING)
     
-    # 障害物衝突
+    # 障害物衝突（壁との衝突はロック取得中でも常にチェック）
     current_time = (step + 1) * P['dt']
     fale = check(trial_state[:, step + 1], trial_state[:, step], P, current_time)
     
     if np.any(fale >= 1):
-        print(f"Agent {agent['id']}: 障害物と衝突")
+        if is_locked:
+            # ロック取得中：壁に衝突した場合は壁手前に押し戻す（衝突扱いにしない）
+            print(f"Agent {agent['id']}: ロック取得中に壁衝突検出 → 前ステップに押し戻し")
+            trial_state[:, step + 1] = trial_state[:, step].copy()
+            return False
+        # 衝突種別を判定：障害物 vs 地面/天井
+        pos_next = trial_state[0:3, step+1]
+        min_height = P.get('min_height', 0.0)
+        max_height = P.get('max_height', 5.0)
+        agent_radius = P.get('agent_radius', 0.3)
+        is_ground_ceiling = (pos_next[2] <= min_height + agent_radius) or \
+                            (pos_next[2] >= max_height - agent_radius)
+        
+        if is_ground_ceiling:
+            # 地面/天井衝突：直前の経路を遡って障害物衝突を探す
+            obstacle_collision_found = False
+            if 'object' in P and P['object'].size > 0:
+                from check import check_wall_collision_batch
+                wall_height = P.get('object_height', P.get('wall_height', 5.0))
+                lookback = min(step, 20)
+                for back_step in range(step, max(step - lookback, 0), -1):
+                    pos_check = trial_state[0:3, back_step]
+                    if 0 <= pos_check[2] <= wall_height:
+                        for obj_idx in range(P['object'].shape[2]):
+                            xv = P['object'][0, :, obj_idx]
+                            yv = P['object'][1, :, obj_idx]
+                            result = check_wall_collision_batch(
+                                np.array([pos_check[0]]), np.array([pos_check[1]]),
+                                xv, yv, agent_radius)
+                            if np.any(result):
+                                agent['collision_pos'] = pos_check.copy()
+                                obstacle_collision_found = True
+                                print(f"Agent {agent['id']}: 障害物衝突検出（step {back_step}）")
+                                break
+                    if obstacle_collision_found:
+                        break
+            
+            if not obstacle_collision_found:
+                agent['collision_pos'] = trial_state[0:3, step+1].copy()
+                print(f"Agent {agent['id']}: 地面/天井と衝突")
+        else:
+            agent['collision_pos'] = trial_state[0:3, step].copy()
+            print(f"Agent {agent['id']}: 障害物と衝突")
+        
         agent['collision_occurred'] = True
-        agent['collision_pos'] = trial_state[0:3, step].copy()
         trial_state[:, step+2:] = 0
         if manager.goal_locked_by == agent_idx: manager.goal_locked_by = -1
         manager.states[agent_idx] = GoalManager.GHOSTED
@@ -346,7 +388,10 @@ def check_agent_status(agent, step, agents_data, manager, agent_idx):
         agent['P']['weight'] = agent.get('original_weight', agent['P']['weight'])
         return True
     
-    # 機体間衝突 
+    # 機体間衝突（ロック取得中はスキップ）
+    if is_locked:
+        return False
+    
     safety_distance = P.get('safety_distance', 0.7)
     my_pos = trial_state[0:3, step+1] # 3D
     

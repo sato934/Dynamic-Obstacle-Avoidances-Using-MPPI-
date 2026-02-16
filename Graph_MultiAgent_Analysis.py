@@ -103,7 +103,8 @@ def plot_inter_agent_distance(agents_history, P, save_path=None):
     max_distance = max(
         np.max(distances) for distances in distance_data.values()
     )
-    ax.set_ylim(0, max_distance * 1.1, fontsize=18)
+    ax.set_ylim(0, max_distance * 1.1)
+    ax.tick_params(axis='both', labelsize=18)
     
     
     plt.tight_layout()

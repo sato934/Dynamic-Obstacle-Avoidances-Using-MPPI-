@@ -80,9 +80,47 @@ def MPPI_GT(P, agbp, bpc, parameter):
         fale = check(trial_state[:, i + 1], trial_state[:, i], P, current_time)
         if np.any(fale >= 1):
             print('衝突')
-            # 衝突した1ステップ前の位置を記録
-            collision_position = trial_state[0:3, i].copy()
-            print(f'衝突位置（1ステップ前）: x={collision_position[0]:.2f}, y={collision_position[1]:.2f}, z={collision_position[2]:.2f}')
+            # 衝突種別を判定：障害物 vs 地面/天井
+            pos_next = trial_state[0:3, i+1]
+            min_height = P.get('min_height', 0.0)
+            max_height = P.get('max_height', 5.0)
+            agent_radius = P.get('agent_radius', 0.3)
+            is_ground_ceiling = (pos_next[2] <= min_height + agent_radius) or \
+                                (pos_next[2] >= max_height - agent_radius)
+            
+            if is_ground_ceiling:
+                # 地面/天井衝突の場合、直前の経路を遡って障害物との衝突を探す
+                obstacle_collision_found = False
+                if 'object' in P and P['object'].size > 0:
+                    from check import check_wall_collision_batch
+                    wall_height = P.get('object_height', P.get('wall_height', 5.0))
+                    # 直近数ステップを遡って障害物衝突を確認
+                    lookback = min(i, 20)
+                    for back_step in range(i, max(i - lookback, 0), -1):
+                        pos_check = trial_state[0:3, back_step]
+                        if 0 <= pos_check[2] <= wall_height:
+                            for obj_idx in range(P['object'].shape[2]):
+                                xv = P['object'][0, :, obj_idx]
+                                yv = P['object'][1, :, obj_idx]
+                                result = check_wall_collision_batch(
+                                    np.array([pos_check[0]]), np.array([pos_check[1]]),
+                                    xv, yv, agent_radius)
+                                if np.any(result):
+                                    collision_position = pos_check.copy()
+                                    obstacle_collision_found = True
+                                    print(f'障害物衝突検出（step {back_step}）: x={collision_position[0]:.2f}, y={collision_position[1]:.2f}, z={collision_position[2]:.2f}')
+                                    break
+                        if obstacle_collision_found:
+                            break
+                
+                if not obstacle_collision_found:
+                    # 障害物衝突が見つからない場合は地面/天井衝突位置を記録
+                    collision_position = trial_state[0:3, i+1].copy()
+                    print(f'地面/天井衝突: x={collision_position[0]:.2f}, y={collision_position[1]:.2f}, z={collision_position[2]:.2f}')
+            else:
+                # 障害物衝突：衝突直前の位置を記録
+                collision_position = trial_state[0:3, i].copy()
+                print(f'障害物衝突: x={collision_position[0]:.2f}, y={collision_position[1]:.2f}, z={collision_position[2]:.2f}')
             break
         # bp_switch の分岐 接近禁止点の設定 先行研究の残り，不要なら削除可
         if P.get('bp_switch', 0) == 1:
