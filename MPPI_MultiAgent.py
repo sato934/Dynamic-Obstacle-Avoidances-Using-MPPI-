@@ -165,7 +165,7 @@ def MPPI_MultiAgent(agents_data, banned_point):
                 agent['seq_ctrl'][:, :, step:] = F_hover
 
         # [Step D] weight のブースト
-        boost_factor = 5.0 
+        boost_factor = 10.0 
         for idx, agent in enumerate(agents_data):
             if manager.goal_locked_by == idx:
                 agent['P']['weight'] = agent['original_weight'] * boost_factor
@@ -198,7 +198,7 @@ def MPPI_MultiAgent(agents_data, banned_point):
         horizon_input = np.zeros((combined_ctrl_dim, P['K'], P['Horizon_size']))
         for idx, agent in enumerate(agents_data):
             for h in range(P['Horizon_size']):
-                # ★【形状エラー対策】強制的に (ctrl_dim, 1)
+                # 形状エラー対策　強制的に (ctrl_dim, 1)
                 current_u = agent['seq_ctrl'][:, :, step + h].reshape(ctrl_dim, 1)
                 horizon_input[idx*ctrl_dim:(idx+1)*ctrl_dim, :, h] = \
                     np.tile(current_u, (1, P['K']))
@@ -214,14 +214,14 @@ def MPPI_MultiAgent(agents_data, banned_point):
             for idx, agent in enumerate(agents_data):
                 agent_state = sim_state[idx*state_dim:(idx+1)*state_dim, :]
                 
-                # ★修正: ゴースト機体は予測内でも完全凍結 (-9999)
+                #  ゴースト機体は予測内でも完全凍結
                 if agent.get('ghosted', False):
                     next_agent_state = agent_state.copy()
                     next_agent_state[0:3, :] = -9999.0  # 位置を遥か彼方へ (3D)
                     next_agent_state[3:6, :] = 0.0      # 速度ゼロ (vx,vy,vz)
                     next_sim_state_list.append(next_agent_state)
                 
-                # ★修正: 作業中機体はその場(ゴール)に固定
+                # 作業中機体はその場(ゴール)に固定
                 elif manager.states[idx] == GoalManager.AT_GOAL_WORKING:
                     next_agent_state = agent_state.copy()
                     next_agent_state[0:3, :] = manager.goal_pos.reshape(3, 1)  # 3D

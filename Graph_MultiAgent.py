@@ -154,8 +154,13 @@ def setup_3d_axis(ax, P):
         pass
 
 
-def Graph_MultiAgent(agents_data):
+def Graph_MultiAgent(agents_data, save_dir='Result_Multi_Animation'):
     """マルチエージェント軌跡アニメーション（4視点）"""
+    import os
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+        print(f"フォルダ作成: {save_dir}")
+
     P = agents_data[0]['P']
     
     # 4視点の設定
@@ -169,17 +174,20 @@ def Graph_MultiAgent(agents_data):
     for elev, azim, name, title, show_x, show_y, show_z, is_2d, use_y, use_z in views:
         print(f"'{name}' ビューのアニメーション生成中...")
         create_single_view_animation(agents_data, P, elev, azim, name, title, 
-                                    is_2d=is_2d, use_y=use_y, use_z=use_z)
+                                    is_2d=is_2d, use_y=use_y, use_z=use_z,
+                                    save_dir=save_dir)
     
     print("全てのアニメーション生成完了")
 
 
 def create_single_view_animation(agents_data, P, elev, azim, name, title, 
-                                is_2d=False, use_y=False, use_z=False):
+                                is_2d=False, use_y=False, use_z=False,
+                                save_dir='Result_Multi_Animation'):
     """単一視点のアニメーション生成"""
+    import os
     view_name = name
     n_agents = len(agents_data)
-    gif_filename = f"multi_agent_animation_{name}.gif"
+    gif_filename = os.path.join(save_dir, f"multi_agent_animation_{name}.gif")
     delay = 0.1  # フレーム間の遅延時間（秒） 
     
     fig = plt.figure(figsize=(10, 8))

@@ -14,7 +14,6 @@ def draw_sphere_surface(ax, center, radius, color='red', alpha=0.5):
     z = center[2] + radius * np.outer(np.ones(np.size(u)), np.cos(v))
     return ax.plot_surface(x, y, z, color=color, alpha=alpha, edgecolor='none')
 
-
 def draw_static_obstacles_3d(ax, P):
     """静的障害物（壁と球体）を3Dで描画"""
     if 'object' not in P:
@@ -45,7 +44,6 @@ def draw_static_obstacles_3d(ax, P):
         center = np.array([xv.mean(), yv.mean(), zv.mean()])
         radius = np.sqrt((xv[0]-center[0])**2 + (yv[0]-center[1])**2 + (zv[0]-center[2])**2)
         draw_sphere_surface(ax, center, radius, color='blue', alpha=0.5)
-
 
 def draw_static_obstacles_2d(ax, P, use_y=False, use_z=False, view_name='top'):
     """静的障害物を2Dで描画（平面ビュー用）"""
@@ -90,7 +88,6 @@ def draw_static_obstacles_2d(ax, P, use_y=False, use_z=False, view_name='top'):
                     radius = np.sqrt((xv[0]-center_x)**2 + (zv[0]-center_z)**2)
                     circle = plt.Circle((center_x, center_z), radius, facecolor='blue', alpha=0.5, edgecolor='k', linewidth=1)
                 ax.add_patch(circle)
-
 
 def setup_3d_axis(ax, P):
     """3D軸の設定"""
@@ -145,9 +142,14 @@ def get_2d_coords(x, y, z, use_y, use_z):
         # X-Z平面
         return (x, z)
 
-
-def Graph_x(ds_state_list, P, agbp_list, bpc_list, collision_list=None, obs_list=None):
+def Graph_x(ds_state_list, P, agbp_list, bpc_list, collision_list=None, obs_list=None,
+            save_dir='Result_Single_Animation'):
     """メインのグラフ描画関数"""
+    import os
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+        print(f"フォルダ作成: {save_dir}")
+
     views = [
         (90, -90, 'top', 'Top View (X-Y)', True, True, False, True, True, False),        # 真上から（X-Y平面）
         (0, -90, 'side_y', 'Side View (Y-Z)', False, True, True, True, True, True),      # Y軸方向から（Y-Z平面）
@@ -158,18 +160,19 @@ def Graph_x(ds_state_list, P, agbp_list, bpc_list, collision_list=None, obs_list
     for elev, azim, name, title, show_x, show_y, show_z, is_2d, use_y, use_z in views:
         print(f"'{name}' ビューのアニメーション生成中...")
         create_single_view_animation(ds_state_list, P, agbp_list, bpc_list, collision_list, obs_list,
-                                    elev, azim, name, title, show_x, show_y, show_z, is_2d, use_y, use_z)
+                                    elev, azim, name, title, show_x, show_y, show_z, is_2d, use_y, use_z,
+                                    save_dir=save_dir)
     
     print("全てのアニメーション生成完了")
     
     # 各試行の最終状態を4視点で1枚の画像に保存
     print("\n最終状態画像を生成中...")
-    save_final_state_4views(ds_state_list, P, collision_list, obs_list, save_dir='Result_Graphs')
+    save_final_state_4views(ds_state_list, P, collision_list, obs_list, save_dir=save_dir)
     print("最終状態画像の生成完了")
 
-
 def create_single_view_animation(ds_state_list, P, agbp_list, bpc_list, collision_list, obs_list,
-                                  elev, azim, name, title, show_x=True, show_y=True, show_z=True, is_2d=False, use_y=False, use_z=False):
+                                  elev, azim, name, title, show_x=True, show_y=True, show_z=True, is_2d=False, use_y=False, use_z=False,
+                                  save_dir='Result_Single_Animation'):
     """1つの視点のアニメーションを生成"""
     view_name = name  # ビュー名を保存
     fig = plt.figure(figsize=(10, 8))
@@ -236,7 +239,8 @@ def create_single_view_animation(ds_state_list, P, agbp_list, bpc_list, collisio
                    color=[0, 0, 1], s=100, marker='D', edgecolors='k', linewidth=2)
         info_text = ax.text2D(0.85, 0.98, '', transform=ax.transAxes, fontsize=12, verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         
-    gif_filename = f'single_animation_{name}.gif'
+    import os
+    gif_filename = os.path.join(save_dir, f'single_animation_{name}.gif')
     delay = 0.01
     images = []
     durations = []
@@ -430,8 +434,7 @@ def create_single_view_animation(ds_state_list, P, agbp_list, bpc_list, collisio
         imageio.mimsave(gif_filename, images, duration=durations)
         print(f"  '{gif_filename}' を保存しました")
 
-
-def save_final_state_4views(ds_state_list, P, collision_list=None, obs_list=None, save_dir='Result_Graphs'):
+def save_final_state_4views(ds_state_list, P, collision_list=None, obs_list=None, save_dir='Result_Single_Animation'):
     """
     各試行の最終状態（目標到達時または終了時）を4視点で1枚の画像にまとめて保存
     配置: 左上=3D, 右上=Top(X-Y), 左下=Y-Z, 右下=X-Z
@@ -618,7 +621,6 @@ def save_final_state_4views(ds_state_list, P, collision_list=None, obs_list=None
     
     print("全試行の最終状態画像を保存完了")
 
-
 def _draw_dynamic_obstacles_2d_at_time(ax, P, t, use_y, use_z):
     """指定時刻の動的障害物を2Dで描画"""
     dyn_obj = P['dynamic_obj']
@@ -653,7 +655,6 @@ def _draw_dynamic_obstacles_2d_at_time(ax, P, t, use_y, use_z):
         patch = plt.Circle(coords_2d, radius, facecolor=color, alpha=0.5, edgecolor='k', linewidth=1)
         ax.add_patch(patch)
 
-
 def _draw_dynamic_obstacles_3d_at_time(ax, P, t):
     """指定時刻の動的障害物を3Dで描画"""
     dyn_obj = P['dynamic_obj']
@@ -684,7 +685,6 @@ def _draw_dynamic_obstacles_3d_at_time(ax, P, t):
         color = [color_intensity, 0, 0]
         
         draw_sphere_surface(ax, new_center, radius, color=color, alpha=0.5)
-
 
 def _calc_dynamic_center_at_time(base_center, waypoints, seg_times, t):
     """指定時刻における動的障害物の中心位置を計算"""

@@ -97,25 +97,30 @@ print("\n=== マルチエージェント分析グラフを作成中 ===")
 common_goal = np.array([0, -4, 2.5])
 P_common['shared_goal_pos'] = common_goal
 
+import os
+multi_save_dir = 'Result_Multi_Animation'
+if not os.path.exists(multi_save_dir):
+    os.makedirs(multi_save_dir)
+
 # 1. 機体間距離グラフ
 print("\n--- 機体間距離グラフ ---")
 plot_inter_agent_distance(
     trial_results[0], P_common,
-    save_path='multi_agent_distance.png'
+    save_path=os.path.join(multi_save_dir, 'multi_agent_distance.png')
 )
 
 # 2. 速度プロファイルグラフ
 print("\n--- 速度プロファイルグラフ ---")
 plot_velocity_profiles(
     trial_results[0], P_common,
-    save_path='multi_velocity_profiles.png'
+    save_path=os.path.join(multi_save_dir, 'multi_velocity_profiles.png')
 )
 
 # 3. 制御入力グラフ 使わないかも？
 print("\n--- 制御入力グラフ ---")
 plot_control_inputs(
     trial_results[0], P_common,
-    save_path='multi_control_inputs.png'
+    save_path=os.path.join(multi_save_dir, 'multi_control_inputs.png')
 )
 
 print('\nFinish!!')
