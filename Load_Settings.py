@@ -12,9 +12,9 @@ def Load_Settings(i):
     P['g'] = 9.8
     
     P['dt'] = 0.2 #制御周期[s]　T＝1/s
-    P['Trial_time'] = 20 #反復1回当たりの時間　単一20 マルチ40
-    P['Trial_num'] = 1 #反復回数 3
-    P['Horizon'] = 4 #評価区間 6 4
+    P['Trial_time'] = 40 #反復1回当たりの時間　単一20 マルチ40
+    P['Trial_num'] = 10 #反復回数 
+    P['Horizon'] = 4 #評価区間 4
     P['K'] = 5000 #経路数（サンプル数）　1000→5000
     P['Temp'] = 0.02 #逆温度
 
@@ -38,12 +38,12 @@ def Load_Settings(i):
     P['initial_controll'] = np.array([[13], [0], [0], [0]])
     
     # 障害物コスト関数の選択 0:従来型  1:動的衝突回避型
-    P['obstacle_cost_type'] = 0
+    P['obstacle_cost_type'] = 1
     
     # 動的衝突回避型のパラメータ
-    P['agent_radius'] = 0.3  # 機体の半径[m]　0.35
-    P['force_sigma_obstacle'] = 0.1 # 障害物力の減衰パラメータ[m] (ギリギリまで小さく)  マルチ0.15 単一0.1
-    P['force_factor_obstacle'] = 500.0  # 障害物力の係数 (範囲を極小化した分、強度を大幅に上げる) 250.0
+    P['agent_radius'] = 0.3  # 機体の半径[m]
+    P['force_sigma_obstacle'] = 0.2 # 障害物力の減衰パラメータ[m] (ギリギリまで小さく)  マルチ0.2 単一0.1
+    P['force_factor_obstacle'] = 250.0  # 障害物力の係数 (範囲を極小化した分、強度を大幅に上げる) マルチ250.0 単一500
     
     #3次元化のパラメータ
     P['wall_height'] = 3.0 # 壁の高さ
@@ -51,12 +51,12 @@ def Load_Settings(i):
     P['max_height'] = 3.0 # 天井
     
     # Social Forceモデルのパラメータ
-    P['lambda_importance'] = 0.4  # 位置vs速度の相対的重要度 2.0 
+    P['lambda_importance'] = 0.4  # 位置vs速度の相対的重要度 
     P['gamma'] = 0.4  # 速度相互作用パラメータ
     P['n'] = 2  # 速度相互作用の指数
     P['n_prime'] = 3  # 角度相互作用の指数
-    P['force_factor_social'] = 3.0  # 力の係数 (動的障害物への反発を強化) 3.0
-    P['neighborhood_range'] = 7.0  # 近傍範囲[m] (狭い環境では短めに) 7.0
+    P['force_factor_social'] = 3.0  # 力の係数 (動的障害物への反発を強化) 
+    P['neighborhood_range'] = 7.0  # 近傍範囲[m] (狭い環境では短めに) 
     
     # 逆二乗反発力のパラメータ
     P['wrep'] = 1.0  # 逆二乗反発力の係数（弱めに調整）値×10^4
@@ -67,14 +67,14 @@ def Load_Settings(i):
     P['force_factor_group_repulsion'] = 10.0  # グループ反発力の係数 (近距離での強い反発)
     
     # マルチエージェント用パラメータ
-    P['safety_distance'] = 0.6  # エージェント間の最小安全距離[m] (agent_radius * 2 + マージン)
-    P['force_factor_inter_agent'] = 50.0  # エージェント間の力の係数（大きいほど強く回避）15.0 25.0
-    P['force_sigma_inter_agent'] = 0.7   # エージェント間の減衰パラメータ[m]（大きいほど遠くから回避）　0.4 0.7
+    P['safety_distance'] = 0.6  # エージェント間の最小安全距離[m] (agent_radius * 2 以上)
+    P['force_factor_inter_agent'] = 50.0  # エージェント間の力の係数（大きいほど強く回避）
+    P['force_sigma_inter_agent'] = 0.7   # エージェント間の減衰パラメータ[m]（大きいほど遠くから回避）　
     P['goal_wait_time'] = 3.0  # ゴール到着後の待機時間[s]（作業時間）
     P['goal_lock_distance'] = 2.0  # ロック取得距離[m]（これ以内でロック判定）
     
     # 目標到達判定
-    P['goal_threshold'] = 0.2  # 目標到達とみなす距離の閾値[m] 0.2　マルチ0.4
+    P['goal_threshold'] = 0.4  # 目標到達とみなす距離の閾値[m] 単一0.2　マルチ0.4
     P['near_goal_threshold'] = 1.0  # 目標近傍での速度緩和を開始する距離[m]
     
     # マハラノビス距離による衝突判定

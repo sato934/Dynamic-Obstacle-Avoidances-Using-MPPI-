@@ -259,37 +259,7 @@ def calculate_social_force_cost(nstate, state, P, t):
         # 進行方向の標準偏差（速度に比例）
         sigma_parallel = max(sigma_parallel_min, sigma_base + sigma_parallel_coeff * speed)
         sigma_perpendicular = sigma_base
-    #    
-    #    # 速度が十分にある場合のみ方向を考慮
-    #    if speed > 0.1:  # 閾値[m/s]
-    #        # 進行方向の角度
-    #        theta = np.arctan2(vel_y, vel_x)
-    #        cos_theta = np.cos(theta)
-    #       sin_theta = np.sin(theta)
-    #       
-    #        # 回転行列 R
-    #        R = np.array([[cos_theta, -sin_theta],
-    #                     [sin_theta,  cos_theta]])
-    #        
-    #        # 進行方向座標系での共分散行列
-    #        D = np.diag([sigma_parallel**2, sigma_perpendicular**2])
-    #        
-    #        # 元の座標系に変換: Σ = R * D * R^T
-    #        position_cov = R @ D @ R.T
-    #    else:
-    #        # 速度が小さい場合は等方的（円形）
-    #        position_cov = np.eye(2) * sigma_base**2
-    #else:
-    #    # 固定の共分散行列
-    #    position_cov = P.get('position_covariance', np.eye(2) * 0.1**2)
-    
-    # κ の計算  論文の計算式
-    # κ = -2 ln(η_c * δ / A_r)
-    # η_c = 1/(2π * sqrt(det(Σ_c))) : 2次元正規分布の正規化定数
-    #det_cov = np.linalg.det(position_cov)
-    #eta_c = 1.0 / (2.0 * np.pi * np.sqrt(det_cov))
     agent_area = P.get('agent_area', np.pi * agent_radius**2) # 機体の面積 A_r [m^2]
-    #kappa_threshold = -2 * np.log(eta_c * collision_risk / agent_area)
     
     # 動的障害物の準備
     dynamic_obj = P.get('current_dynamic_obj', P.get('dynamic_obj'))
@@ -302,7 +272,6 @@ def calculate_social_force_cost(nstate, state, P, t):
         return np.zeros(n_samples)
     
     # 障害物の点群データを準備（3次元配列形式）
-    # dynamic_obj shape: (3, points, n_obstacles) or (3, points)
     obs_points_list_x = []
     obs_points_list_y = []
     obs_points_list_z = []  # 3D対応
@@ -390,7 +359,7 @@ def calculate_social_force_cost(nstate, state, P, t):
         
         # 速度依存の共分散行列を計算（3D対応は複雑なので簡易版を実装）
         if use_velocity_dependent_cov and obs_speed > 0.1:
-            # 3D簡易版：等方的な共分散行列（将来的には回転を考慮可能）
+            # 3D簡易版：等方的な共分散行列
             sigma_parallel = max(sigma_parallel_min, sigma_base + sigma_parallel_coeff * obs_speed)
             sigma_perpendicular = sigma_base
             sigma_vertical = P.get('sigma_vertical', 0.1)  # z方向の標準偏差
