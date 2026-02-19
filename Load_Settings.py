@@ -12,7 +12,7 @@ def Load_Settings(i):
     P['g'] = 9.8
     
     P['dt'] = 0.2 #制御周期[s]　T＝1/s
-    P['Trial_time'] = 40 #反復1回当たりの時間　単一20 マルチ40
+    P['Trial_time'] = 20 #反復1回当たりの時間　単一20 マルチ40
     P['Trial_num'] = 10 #反復回数 
     P['Horizon'] = 4 #評価区間 4
     P['K'] = 5000 #経路数（サンプル数）　1000→5000
@@ -42,8 +42,8 @@ def Load_Settings(i):
     
     # 動的衝突回避型のパラメータ
     P['agent_radius'] = 0.3  # 機体の半径[m]
-    P['force_sigma_obstacle'] = 0.2 # 障害物力の減衰パラメータ[m] (ギリギリまで小さく)  マルチ0.2 単一0.1
-    P['force_factor_obstacle'] = 250.0  # 障害物力の係数 (範囲を極小化した分、強度を大幅に上げる) マルチ250.0 単一500
+    P['force_sigma_obstacle'] = 0.1 # 障害物力の減衰パラメータ[m] (ギリギリまで小さく)  マルチ0.2 単一0.1
+    P['force_factor_obstacle'] = 500.0  # 障害物力の係数 (範囲を極小化した分、強度を大幅に上げる) マルチ250.0 単一500
     
     #3次元化のパラメータ
     P['wall_height'] = 3.0 # 壁の高さ
@@ -74,7 +74,7 @@ def Load_Settings(i):
     P['goal_lock_distance'] = 2.0  # ロック取得距離[m]（これ以内でロック判定）
     
     # 目標到達判定
-    P['goal_threshold'] = 0.4  # 目標到達とみなす距離の閾値[m] 単一0.2　マルチ0.4
+    P['goal_threshold'] = 0.2  # 目標到達とみなす距離の閾値[m] 単一0.2　マルチ0.4
     P['near_goal_threshold'] = 1.0  # 目標近傍での速度緩和を開始する距離[m]
     
     # マハラノビス距離による衝突判定
